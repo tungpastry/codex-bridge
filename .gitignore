@@ -1,0 +1,16 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+storage/cache/*
+storage/requests/*
+storage/responses/*
+storage/reports/*
+storage/gemini_runs/*
+!storage/cache/.gitkeep
+!storage/requests/.gitkeep
+!storage/responses/.gitkeep
+!storage/reports/.gitkeep
+!storage/gemini_runs/.gitkeep
