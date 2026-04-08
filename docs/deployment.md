@@ -123,6 +123,11 @@ MIDDAY_DESKTOP_SSH=nexus@192.168.1.15
 MIDDAY_SERVER_SSH=nexus@192.168.1.30
 MIDDAY_SERVER_ROOT=/home/nexus/projects/MiddayCommander
 MIDDAY_ROUTER_SERVICE=codex-bridge.service
+MIDDAY_RELEASE_REPO=tungpastry/MiddayCommander
+MIDDAY_RELEASES_ROOT=/home/nexus/releases/middaycommander
+MIDDAY_RELEASE_BINARY_NAME=mdc
+MIDDAY_RELEASE_SERVER_OS=linux
+MIDDAY_RELEASE_SERVER_ARCH=amd64
 ```
 
 ## 5. Configure SSH Alias From UbuntuDesktop to Mac
@@ -202,7 +207,49 @@ This wrapper:
 - restarts `codex-bridge.service`
 - verifies both local and LAN health
 
-## 9. Post-Deploy Verification
+## 9. MiddayCommander Release Flow
+
+Release prerequisites on the Mac mini:
+
+- `gh` installed and authenticated for `tungpastry/MiddayCommander`
+- `goreleaser` installed
+- a clean MiddayCommander worktree
+- an annotated release tag pointing at `HEAD`
+
+Release wrapper usage:
+
+```bash
+cd "/Users/macadmin/Documents/New project/codex-bridge"
+./scripts/mac/middaycommander-release.sh --tag v0.3 --dry-run
+./scripts/mac/middaycommander-release.sh --tag v0.3
+```
+
+This wrapper:
+
+- validates the local tag and repo state on the Mac
+- runs `go test ./...` and `go build ./...`
+- runs `goreleaser build --clean`
+- packages archives and `checksums.txt` locally
+- creates a GitHub release in `tungpastry/MiddayCommander`
+- promotes the Linux `amd64` artifact to `/home/nexus/releases/middaycommander`
+- updates `/home/nexus/releases/middaycommander/current` to the new release
+- verifies `current/mdc --version`
+
+The promoted server layout is:
+
+```text
+/home/nexus/releases/middaycommander/
+├── current -> releases/<tag>
+└── releases/
+    └── <tag>/
+        ├── mdc
+        ├── checksums.txt
+        └── metadata.json
+```
+
+v1 intentionally does not restart any MiddayCommander service on UbuntuServer.
+
+## 10. Post-Deploy Verification
 
 Router checks:
 
@@ -215,6 +262,7 @@ Mac script checks:
 - `./scripts/mac/middaycommander-health.sh`
 - `./scripts/mac/middaycommander-morning-check.sh`
 - `./scripts/mac/codex-bridge-daily-report.sh "done: router healthy" "next: review logs"`
+- `./scripts/mac/middaycommander-release.sh --tag v0.3 --dry-run`
 
 Expected MiddayCommander outcomes:
 
@@ -222,6 +270,7 @@ Expected MiddayCommander outcomes:
 - `codex-bridge.service` active on `192.168.1.15`
 - `~/projects/MiddayCommander` present on `192.168.1.30`
 - MiddayCommander branch, head, and worktree cleanliness visible in the health output
+- promoted release root, current symlink target, and binary version visible in the health output
 
 Gemini push-path check:
 

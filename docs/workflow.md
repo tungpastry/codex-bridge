@@ -1,6 +1,6 @@
 # Workflow
 
-This document describes the three core workflows that `codex-bridge` is designed to support in v1.
+This document describes the four core workflows that `codex-bridge` is designed to support in v1.
 
 ## 1. Build New Feature or Bugfix
 
@@ -97,6 +97,36 @@ Expected outputs:
 - service state summary
 - Markdown report with `Done`, `Open Issues`, and `Next Actions`
 
+## 4. MiddayCommander Release
+
+Typical target:
+
+- publish a tagged MiddayCommander build to GitHub
+- promote the Linux server artifact to UbuntuServer
+- expose the promoted release state through health checks
+
+Recommended flow:
+
+1. Create an annotated tag in the local MiddayCommander repo.
+2. Run `scripts/mac/middaycommander-release.sh --tag <tag> --dry-run`.
+3. Run `scripts/mac/middaycommander-release.sh --tag <tag>` for the full release.
+4. Run `scripts/mac/middaycommander-health.sh` to confirm repo health and release health together.
+5. Run `scripts/mac/middaycommander-morning-check.sh` if you want a saved operator handoff report.
+
+What this workflow is good at:
+
+- enforcing clean repo and annotated-tag rules
+- publishing to `tungpastry/MiddayCommander` without touching upstream brew config
+- keeping promoted Linux artifacts under `/home/nexus/releases/middaycommander`
+- making the currently promoted binary visible in normal health output
+
+Stop conditions:
+
+- if the MiddayCommander repo is dirty
+- if the tag is missing, lightweight, or not at `HEAD`
+- if `gh` or `goreleaser` is missing on the Mac
+- if the GitHub release already exists or the server release directory already exists
+
 ## Cross-Workflow Notes
 
 Things that stay true in every workflow:
@@ -104,6 +134,7 @@ Things that stay true in every workflow:
 - `codex-bridge` preprocesses first
 - route choice is explicit
 - MiddayCommander DevOps ownership now starts here, not in the product repo
+- release health and repo health are related but distinct views
 - Codex App is never auto-controlled
 - Gemini CLI is only used within the safe-command boundary
 - risky work is blocked instead of being pushed through “just in case”

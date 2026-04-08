@@ -46,6 +46,7 @@ if (( DRY_RUN )); then
 - Router URL: ${MIDDAY_ROUTER_BASE_URL}
 - UbuntuDesktop: ${MIDDAY_DESKTOP_SSH}
 - UbuntuServer: ${MIDDAY_SERVER_SSH}
+- Release root: ${MIDDAY_RELEASES_ROOT}
 
 Would run:
 - ${SCRIPT_DIR}/middaycommander-health.sh

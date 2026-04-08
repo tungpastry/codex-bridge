@@ -46,6 +46,7 @@ This repo exists to make mixed coding and operations work less noisy and less am
 The initial target repository is `MiddayCommander`, but the router is generic enough for other repos with the same workflow shape.
 
 MiddayCommander now uses `codex-bridge` as the forward-looking home for new DevOps automation, health checks, and operator SOPs. The application code stays in the `MiddayCommander` repo, while new deploy and health workflows live here.
+This now includes the first MiddayCommander release pipeline: annotated tag validation on the Mac, GitHub release publishing to the fork, and Linux artifact promotion to the managed releases directory on UbuntuServer.
 
 ## System Overview
 
@@ -131,6 +132,8 @@ Minimum baseline:
 - Python `3.11+`
 - `bash`, `curl`, `jq`, `ssh`
 - `git`
+- `gh` on the Mac mini for GitHub release publishing
+- `goreleaser` on the Mac mini for repeatable release builds
 - FastAPI-compatible runtime on `UbuntuDesktop`
 - Gemini CLI installed on the Mac mini
 - optional Ollama on `UbuntuDesktop` if you want future prompt refinement
@@ -250,13 +253,34 @@ Then run the MiddayCommander-specific wrappers:
 ./scripts/mac/middaycommander-deploy-router.sh
 ./scripts/mac/middaycommander-health.sh
 ./scripts/mac/middaycommander-morning-check.sh
+./scripts/mac/middaycommander-release.sh --tag v0.3
 ```
 
 These wrappers treat `codex-bridge` as the DevOps source of truth for MiddayCommander:
 
 - the deploy wrapper syncs the local `codex-bridge` source tree to `/home/nexus/codex-bridge` on `192.168.1.15`
-- the health wrapper verifies router reachability, `codex-bridge.service`, and the MiddayCommander repo state on `192.168.1.30`
+- the health wrapper verifies router reachability, `codex-bridge.service`, the MiddayCommander repo state, and the promoted release state on `192.168.1.30`
 - the morning check writes a timestamped Markdown report under `storage/reports/`
+- the release wrapper validates an annotated tag, builds artifacts, publishes the GitHub release to `tungpastry/MiddayCommander`, and promotes the Linux `amd64` artifact to `/home/nexus/releases/middaycommander`
+
+### MiddayCommander Release Pipeline from the Mac mini
+
+The v1 release pipeline is tag-driven and intentionally simple:
+
+```bash
+./scripts/mac/middaycommander-release.sh --tag v0.3 --dry-run
+./scripts/mac/middaycommander-release.sh --tag v0.3 --prepare-only
+./scripts/mac/middaycommander-release.sh --tag v0.3
+```
+
+Important behaviors:
+
+- only annotated tags are accepted
+- the release tag must point at the current `HEAD`
+- the local MiddayCommander repo must be clean before the release starts
+- GitHub releases publish to `tungpastry/MiddayCommander`, not upstream
+- server promotion targets `/home/nexus/releases/middaycommander`
+- v1 does not restart any MiddayCommander service on UbuntuServer, because no such service exists yet
 
 ### Classify a coding task
 
@@ -329,6 +353,7 @@ See [docs/api-reference.md](docs/api-reference.md) for full request and response
 | `scripts/mac/middaycommander-deploy-router.sh` | sync and restart the MiddayCommander router stack on UbuntuDesktop |
 | `scripts/mac/middaycommander-health.sh` | verify the MiddayCommander 3-node topology from the Mac mini |
 | `scripts/mac/middaycommander-morning-check.sh` | write a timestamped MiddayCommander morning health report |
+| `scripts/mac/middaycommander-release.sh` | validate a release tag, build artifacts, publish GitHub release assets, and promote the Linux server binary |
 | `scripts/mac/codex-bridge-triage-log.sh` | fetch remote journalctl logs and summarize them |
 | `scripts/mac/codex-bridge-summarize-diff.sh` | summarize `git diff main...HEAD` |
 | `scripts/mac/codex-bridge-make-brief.sh` | generate Markdown brief for Codex App |
@@ -356,6 +381,7 @@ See [docs/api-reference.md](docs/api-reference.md) for full request and response
 Short-term:
 
 - keep expanding MiddayCommander-specific DevOps wrappers and SOPs from this repo
+- harden the MiddayCommander release pipeline with rollback-aware tooling
 - tighten structured validation for Gemini plan JSON
 - add more service-aware safe command templates
 - expand MiddayCommander-focused examples

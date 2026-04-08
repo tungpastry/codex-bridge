@@ -21,9 +21,43 @@ Checklist:
 
 Expected output:
 
-- Markdown report with `Router`, `UbuntuDesktop`, `UbuntuServer`, `MiddayCommander Repo`, `Open Issues`, and `Next Actions`
+- Markdown report with `Router`, `UbuntuDesktop`, `UbuntuServer`, `MiddayCommander Repo`, `MiddayCommander Release`, `Open Issues`, and `Next Actions`
 - clear branch/head/worktree visibility for the MiddayCommander repo on `192.168.1.30`
+- clear release-root/current-version visibility for the promoted MiddayCommander binary on `192.168.1.30`
 - obvious operator next steps
+
+## Release SOP
+
+Goal:
+
+- produce a repeatable tagged release for MiddayCommander
+- publish it to GitHub
+- promote the Linux server binary without manual copy/paste deploy steps
+
+Checklist:
+
+1. Confirm the local MiddayCommander worktree is clean.
+2. Confirm the release tag is annotated and points to `HEAD`.
+3. Confirm `gh` and `goreleaser` are installed on the Mac mini.
+4. Run `scripts/mac/middaycommander-release.sh --tag <tag> --dry-run`.
+5. Run `scripts/mac/middaycommander-release.sh --tag <tag>`.
+6. Run `scripts/mac/middaycommander-health.sh` to confirm repo health and promoted release health.
+7. Save or review `storage/releases/<tag>/summary.json`, `publish.json`, and `promote.json` for handoff.
+
+Expected output:
+
+- a GitHub release in `tungpastry/MiddayCommander`
+- a promoted server release under `/home/nexus/releases/middaycommander/releases/<tag>/`
+- `current -> releases/<tag>` on UbuntuServer
+- successful `current/mdc --version`
+
+Stop conditions:
+
+- dirty repo
+- missing or lightweight tag
+- missing `gh` or `goreleaser`
+- GitHub release already exists
+- target server release directory already exists
 
 ## Build SOP
 

@@ -33,6 +33,13 @@ midday_load_env() {
   : "${MIDDAY_ROUTER_SERVICE:=codex-bridge.service}"
   : "${MIDDAY_DESKTOP_BRIDGE_ROOT:=/home/nexus/codex-bridge}"
   : "${MIDDAY_REPORTS_DIR:=${MIDDAY_BRIDGE_MAC_ROOT}/storage/reports}"
+  : "${MIDDAY_RELEASE_REPO:=tungpastry/MiddayCommander}"
+  : "${MIDDAY_RELEASES_ROOT:=/home/nexus/releases/middaycommander}"
+  : "${MIDDAY_RELEASE_BINARY_NAME:=mdc}"
+  : "${MIDDAY_RELEASE_SERVER_OS:=linux}"
+  : "${MIDDAY_RELEASE_SERVER_ARCH:=amd64}"
+  : "${MIDDAY_RELEASE_DIST_DIR:=${MIDDAY_MAC_ROOT}/dist}"
+  : "${MIDDAY_RELEASE_STORAGE_DIR:=${MIDDAY_BRIDGE_MAC_ROOT}/storage/releases}"
 
   export MIDDAY_MAC_ROOT
   export MIDDAY_BRIDGE_MAC_ROOT
@@ -43,6 +50,13 @@ midday_load_env() {
   export MIDDAY_ROUTER_SERVICE
   export MIDDAY_DESKTOP_BRIDGE_ROOT
   export MIDDAY_REPORTS_DIR
+  export MIDDAY_RELEASE_REPO
+  export MIDDAY_RELEASES_ROOT
+  export MIDDAY_RELEASE_BINARY_NAME
+  export MIDDAY_RELEASE_SERVER_OS
+  export MIDDAY_RELEASE_SERVER_ARCH
+  export MIDDAY_RELEASE_DIST_DIR
+  export MIDDAY_RELEASE_STORAGE_DIR
 }
 
 midday_require_cmd() {
@@ -57,6 +71,10 @@ midday_require_cmd() {
 
 midday_now_utc() {
   date -u +"%Y%m%dT%H%M%SZ"
+}
+
+midday_now_utc_iso() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
 }
 
 midday_first_line() {
@@ -75,4 +93,65 @@ midday_markdown_bool() {
   else
     printf 'no'
   fi
+}
+
+midday_require_dir() {
+  local dir="$1"
+  local label="$2"
+  if [[ ! -d "$dir" ]]; then
+    echo "${label} not found: ${dir}" >&2
+    exit 1
+  fi
+}
+
+midday_require_clean_git_worktree() {
+  local repo="$1"
+  local status_output
+  status_output="$(git -C "$repo" status --short)"
+  if [[ -n "$status_output" ]]; then
+    echo "Git worktree is not clean in ${repo}" >&2
+    printf '%s\n' "$status_output" >&2
+    exit 1
+  fi
+}
+
+midday_require_annotated_tag_at_head() {
+  local repo="$1"
+  local tag="$2"
+  local object_type
+  local tag_commit
+  local head_commit
+
+  object_type="$(git -C "$repo" for-each-ref "refs/tags/${tag}" --format='%(objecttype)' | sed -n '1p')"
+  if [[ -z "$object_type" ]]; then
+    echo "Release tag not found locally: ${tag}" >&2
+    exit 1
+  fi
+  if [[ "$object_type" != "tag" ]]; then
+    echo "Release tag must be annotated: ${tag}" >&2
+    exit 1
+  fi
+
+  tag_commit="$(git -C "$repo" rev-parse "${tag}^{commit}")"
+  head_commit="$(git -C "$repo" rev-parse HEAD)"
+  if [[ "$tag_commit" != "$head_commit" ]]; then
+    echo "Release tag ${tag} must point to HEAD (${head_commit}), found ${tag_commit}" >&2
+    exit 1
+  fi
+
+  printf '%s\n' "$tag_commit"
+}
+
+midday_release_dir_for_tag() {
+  local tag="$1"
+  printf '%s/releases/%s\n' "$MIDDAY_RELEASES_ROOT" "$tag"
+}
+
+midday_release_current_path() {
+  printf '%s/current\n' "$MIDDAY_RELEASES_ROOT"
+}
+
+midday_local_release_dir_for_tag() {
+  local tag="$1"
+  printf '%s/%s\n' "$MIDDAY_RELEASE_STORAGE_DIR" "$tag"
 }
