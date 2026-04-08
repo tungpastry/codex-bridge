@@ -1,0 +1,185 @@
+# Deployment
+
+This document describes how to deploy `codex-bridge` across the intended three-node setup.
+
+## Target Topology
+
+| Node | Address | Purpose |
+| --- | --- | --- |
+| Mac mini | `192.168.1.7` | operator workstation and Gemini runner |
+| UbuntuDesktop | `192.168.1.15` | router host |
+| UbuntuServer | `192.168.1.30` | runtime services and logs |
+
+## 1. Deploy the Router on UbuntuDesktop
+
+Clone and install:
+
+```bash
+cd /home/nexus
+git clone git@github.com:tungpastry/codex-bridge.git
+cd codex-bridge
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+Recommended `.env` on UbuntuDesktop:
+
+```env
+APP_NAME=codex-bridge
+APP_ENV=dev
+APP_HOST=0.0.0.0
+APP_PORT=8787
+LLM_BACKEND=ollama
+LLM_BASE_URL=http://127.0.0.1:11434
+LLM_MODEL=gemma3:1b-it-qat
+LLM_TIMEOUT_SECONDS=120
+PROMPTS_DIR=/home/nexus/codex-bridge/prompts
+STORAGE_DIR=/home/nexus/codex-bridge/storage
+CORS_ALLOW_ORIGINS_RAW=http://localhost,http://127.0.0.1
+ALLOWED_RESTART_SERVICES_RAW=codex-bridge,postgresql,nginx
+CODEX_BRIDGE_PUSH_SSH_ALIAS=MacMiniGemini
+CODEX_BRIDGE_MAC_ROOT=/Users/macadmin/Documents/New project/codex-bridge
+```
+
+## 2. Install the systemd Unit
+
+```bash
+sudo cp systemd/codex-bridge.service /etc/systemd/system/codex-bridge.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now codex-bridge.service
+sudo systemctl status codex-bridge.service --no-pager --full
+```
+
+Useful service commands:
+
+```bash
+sudo systemctl restart codex-bridge.service
+sudo journalctl -u codex-bridge.service -n 100 --no-pager
+curl -sS http://127.0.0.1:8787/health | jq .
+```
+
+## 3. Confirm LAN Reachability
+
+From the Mac mini:
+
+```bash
+curl -sS http://192.168.1.15:8787/health | jq .
+```
+
+If this times out:
+
+- check `ufw` or any other local firewall
+- confirm the service is listening on `0.0.0.0:8787`
+- confirm the host IP is still `192.168.1.15`
+
+## 4. Prepare the Mac mini
+
+Clone the repo on the Mac:
+
+```bash
+git clone git@github.com:tungpastry/codex-bridge.git
+cd codex-bridge
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+Recommended Mac additions to `.env`:
+
+```env
+CODEX_BRIDGE_BASE_URL=http://192.168.1.15:8787
+CODEX_BRIDGE_GEMINI_BIN=/opt/homebrew/bin/gemini
+CODEX_BRIDGE_MAC_ROOT=/Users/macadmin/Documents/New project/codex-bridge
+CODEX_BRIDGE_ALLOWED_RESTART_SERVICES=codex-bridge,postgresql,nginx
+CODEX_BRIDGE_PUSH_SSH_ALIAS=MacMiniGemini
+CODEX_BRIDGE_GEMINI_TIMEOUT_SECONDS=180
+```
+
+Also confirm:
+
+- Gemini CLI works locally
+- Homebrew Python is available
+- `jq`, `curl`, and `ssh` are installed
+- Remote Login is enabled if UbuntuDesktop will push jobs to the Mac
+
+## 5. Configure SSH Alias From UbuntuDesktop to Mac
+
+Add to `~/.ssh/config` on UbuntuDesktop:
+
+```sshconfig
+Host MacMiniGemini
+  HostName 192.168.1.7
+  User macadmin
+  IdentityFile ~/.ssh/id_ed25519
+  StrictHostKeyChecking accept-new
+```
+
+Then test:
+
+```bash
+ssh MacMiniGemini 'hostname && whoami'
+```
+
+Expected output should identify the Mac and the `macadmin` user.
+
+## 6. Push-Path Setup
+
+`scripts/push_gemini_to_mac.sh` reads `CODEX_BRIDGE_PUSH_SSH_ALIAS` and `CODEX_BRIDGE_MAC_ROOT` from the repo `.env`.
+
+Once configured, UbuntuDesktop can push a prepared job to the Mac with:
+
+```bash
+cd /home/nexus/codex-bridge
+./scripts/push_gemini_to_mac.sh --job-file storage/gemini_runs/manual-push-test-job.json
+```
+
+## 7. Optional Ollama Preparation
+
+The router is heuristic-first, so Ollama is optional in v1. If you do run it:
+
+- keep it local to UbuntuDesktop
+- treat it as refinement, not a hard dependency
+- do not let router availability depend on model reachability
+
+## 8. Upgrade Flow
+
+Typical upgrade flow:
+
+```bash
+cd /home/nexus/codex-bridge
+git pull origin main
+source .venv/bin/activate
+pip install -r requirements.txt
+sudo systemctl restart codex-bridge.service
+sudo systemctl status codex-bridge.service --no-pager --full
+```
+
+For Mac-side runner updates:
+
+```bash
+cd "/Users/macadmin/Documents/New project/codex-bridge"
+git pull origin main
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## 9. Post-Deploy Verification
+
+Router checks:
+
+- `curl -sS http://127.0.0.1:8787/health | jq .`
+- `curl -sS http://192.168.1.15:8787/health | jq .`
+
+Mac script checks:
+
+- `./scripts/mac/codex-bridge-health.sh`
+- `./scripts/mac/codex-bridge-daily-report.sh "done: router healthy" "next: review logs"`
+
+Gemini push-path check:
+
+- dispatch or build a sample `gemini_job`
+- push it with `scripts/push_gemini_to_mac.sh`
+- confirm artifacts appear under `storage/gemini_runs/`

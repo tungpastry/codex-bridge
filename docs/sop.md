@@ -1,29 +1,100 @@
 # SOP
 
+This document turns the main workflows into operator checklists that are easy to repeat.
+
 ## Morning SOP
+
+Goal:
+
+- confirm the router is reachable
+- confirm key services are alive
+- catch obvious incidents early
+
+Checklist:
 
 1. Run `scripts/mac/codex-bridge-health.sh`.
 2. Run `scripts/mac/codex-bridge-morning-check.sh`.
-3. Review any failed or inactive services on `UbuntuServer`.
-4. Escalate risky findings to a human before any production change.
+3. Review inactive, failed, or restarting services on `UbuntuServer`.
+4. Check whether router health, logs, or network reachability look abnormal.
+5. Escalate risky production findings to a human before any change is made.
+
+Expected output:
+
+- short health JSON or pretty summary
+- quick list of service states
+- obvious operator next steps
 
 ## Build SOP
 
-1. Gather issue or feature context.
-2. Run `scripts/mac/codex-bridge-dispatch.sh task ...`.
-3. If route is `codex`, paste the brief into Codex App.
-4. Keep implementation scoped and verify with local tests or smoke checks.
+Goal:
+
+- keep code tasks clean, scoped, and reviewable
+
+Checklist:
+
+1. Gather the issue title, repo, and raw context.
+2. Run `scripts/mac/codex-bridge-dispatch.sh task ...` or `scripts/mac/codex-bridge-make-brief.sh ...`.
+3. If the route is `codex`, copy the generated brief into Codex App.
+4. Keep the implementation scoped to the stated goal and constraints.
+5. Run local tests, smoke checks, or relevant validation commands.
+6. Review the patch before commit.
+
+Stop conditions:
+
+- if the task is actually an ops issue, switch to the incident flow
+- if the task includes risky production signals, stop and escalate
 
 ## Incident SOP
 
+Goal:
+
+- inspect the system safely
+- avoid destructive improvisation during pressure
+
+Checklist:
+
 1. Run `scripts/mac/codex-bridge-triage-log.sh <service>`.
-2. If safe, run `scripts/mac/codex-bridge-auto.sh log ...`.
-3. Review executed commands and final markdown in `storage/gemini_runs/`.
-4. Stop immediately if route becomes `human`.
+2. Review the returned summary and recommended tool.
+3. If safe, run `scripts/mac/codex-bridge-auto.sh log ...` or dispatch a Gemini job through the push path.
+4. Review the executed commands and the final Markdown summary in `storage/gemini_runs/`.
+5. Review timing information if Gemini latency felt slow or ambiguous.
+6. Stop immediately if the route becomes `human` or the plan is blocked.
+
+What not to do:
+
+- do not bypass the safe command layer with ad hoc destructive shell
+- do not treat production auth, firewall, or schema changes as routine auto-runs
 
 ## End-of-Day SOP
 
-1. Collect completed items, open issues, and next actions.
+Goal:
+
+- leave a clear handoff
+- preserve unresolved risks and next actions
+
+Checklist:
+
+1. Collect completed work, open issues, and next actions.
 2. Run `scripts/mac/codex-bridge-daily-report.sh`.
-3. Save or share the markdown report.
-4. Confirm any pending risky items are documented for human follow-up.
+3. Save or share the Markdown report.
+4. Record any risky or blocked item that still needs human review.
+5. Confirm the next operator can tell what is done and what is still pending.
+
+## Artifact Review SOP
+
+When Gemini auto-run is involved, check these files under `storage/gemini_runs/`:
+
+- `<run_id>-job.json`
+- `<run_id>-gemini-output.json`
+- `<run_id>-plan.json`
+- `<run_id>-exec-results.json`
+- `<run_id>-timing.json`
+- `<run_id>-final.json`
+
+Use them to answer:
+
+- what job the router generated
+- what Gemini actually returned
+- what commands were executed
+- whether the run timed out or was interrupted
+- how long the headless stage and total pipeline took
