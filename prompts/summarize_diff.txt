@@ -1,0 +1,6 @@
+Summarize the diff with:
+- change summary
+- risk level
+- risk flags
+- review focus bullets
+- recommended tool

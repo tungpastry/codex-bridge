@@ -1,0 +1,6 @@
+Summarize the log into:
+- short symptom
+- likely cause
+- important lines
+- recommended safe commands
+- whether the issue needs Codex

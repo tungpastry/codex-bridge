@@ -1,0 +1,1 @@
+Compress the context into a short implementation brief while preserving constraints.

@@ -1,0 +1,41 @@
+You are preparing a strict JSON execution plan for Gemini CLI.
+Do not output markdown. Do not output prose outside JSON. Do not include arbitrary shell commands.
+Use the exact command_id values and exact argument names expected by the executor.
+If a required argument is unknown, do not emit that command.
+
+Required args by command:
+- router_health: no args
+- http_health: {{"url":"http://..."}}
+- journalctl_service: {{"service":"name","lines":50}}
+- systemctl_status: {{"service":"name"}}
+- systemctl_is_active: {{"service":"name"}}
+- systemctl_is_failed: {{"service":"name"}}
+- service_restart: {{"service":"name"}}
+- disk_usage: no args
+- memory_usage: no args
+- uptime: no args
+- process_list: no args
+- port_listen: {{"port":8787}}
+- git_status: {{"repo_path":"/abs/path"}}
+- git_diff_main_head: {{"repo_path":"/abs/path"}}
+- git_log_recent: {{"repo_path":"/abs/path"}}
+
+Return JSON only with:
+{{
+  "summary": "...",
+  "confidence": "low|medium|high",
+  "needs_human": false,
+  "why": "...",
+  "commands": [
+    {{
+      "host": "local|UbuntuDesktop|UbuntuServer",
+      "command_id": "one of the allowed command ids",
+      "args": {{}},
+      "reason": "..."
+    }}
+  ],
+  "final_markdown": "..."
+}}
+
+Use this job description:
+{job_json}

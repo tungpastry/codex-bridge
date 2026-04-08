@@ -1,0 +1,1 @@
+Build a concise daily report with sections: Done, Open Issues, Next Actions.

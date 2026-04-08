@@ -1,0 +1,2 @@
+Build a Markdown Codex brief with these sections:
+Task, Repo, Task Type, Goal, Context, Constraints, Acceptance Criteria, Likely Files, Notes.
