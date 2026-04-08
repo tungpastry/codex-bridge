@@ -317,6 +317,7 @@ See [docs/api-reference.md](docs/api-reference.md) for full request and response
 - [docs/architecture.md](docs/architecture.md)
 - [docs/api-reference.md](docs/api-reference.md)
 - [docs/deployment.md](docs/deployment.md)
+- [docs/huong-dan-su-dung.md](docs/huong-dan-su-dung.md)
 - [docs/workflow.md](docs/workflow.md)
 - [docs/sop.md](docs/sop.md)
 - [docs/troubleshooting.md](docs/troubleshooting.md)
