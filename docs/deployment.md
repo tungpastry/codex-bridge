@@ -1,6 +1,6 @@
 # Deployment
 
-This document describes how to deploy `codex-bridge` across the intended three-node setup.
+This document describes how to deploy `codex-bridge` across the intended three-node setup, with MiddayCommander as the first fully managed DevOps target.
 
 ## Target Topology
 
@@ -42,6 +42,8 @@ ALLOWED_RESTART_SERVICES_RAW=codex-bridge,postgresql,nginx
 CODEX_BRIDGE_PUSH_SSH_ALIAS=MacMiniGemini
 CODEX_BRIDGE_MAC_ROOT=/Users/macadmin/Documents/New project/codex-bridge
 ```
+
+For the MiddayCommander milestone, the deployed tree on UbuntuDesktop is allowed to be a synced service checkout under `/home/nexus/codex-bridge`. It does not need to be a full git clone, because the Mac-side deploy wrapper can refresh that tree directly from the local source of truth.
 
 ## 2. Install the systemd Unit
 
@@ -105,6 +107,24 @@ Also confirm:
 - `jq`, `curl`, and `ssh` are installed
 - Remote Login is enabled if UbuntuDesktop will push jobs to the Mac
 
+Create the MiddayCommander target override file on the Mac if you need local custom values:
+
+```bash
+cp targets/middaycommander.env.example targets/middaycommander.env
+```
+
+Important target defaults:
+
+```env
+MIDDAY_MAC_ROOT=/Users/macadmin/Documents/New project/MiddayCommander
+MIDDAY_BRIDGE_MAC_ROOT=/Users/macadmin/Documents/New project/codex-bridge
+MIDDAY_ROUTER_BASE_URL=http://192.168.1.15:8787
+MIDDAY_DESKTOP_SSH=nexus@192.168.1.15
+MIDDAY_SERVER_SSH=nexus@192.168.1.30
+MIDDAY_SERVER_ROOT=/home/nexus/projects/MiddayCommander
+MIDDAY_ROUTER_SERVICE=codex-bridge.service
+```
+
 ## 5. Configure SSH Alias From UbuntuDesktop to Mac
 
 Add to `~/.ssh/config` on UbuntuDesktop:
@@ -146,7 +166,7 @@ The router is heuristic-first, so Ollama is optional in v1. If you do run it:
 
 ## 8. Upgrade Flow
 
-Typical upgrade flow:
+Typical generic upgrade flow:
 
 ```bash
 cd /home/nexus/codex-bridge
@@ -166,6 +186,22 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+MiddayCommander-specific deploy flow from the Mac mini:
+
+```bash
+cd "/Users/macadmin/Documents/New project/codex-bridge"
+./scripts/mac/middaycommander-deploy-router.sh
+```
+
+This wrapper:
+
+- syncs the local `codex-bridge` source tree to `/home/nexus/codex-bridge` on `192.168.1.15`
+- preserves the remote `.env`
+- refreshes `.venv`
+- reinstalls the systemd unit
+- restarts `codex-bridge.service`
+- verifies both local and LAN health
+
 ## 9. Post-Deploy Verification
 
 Router checks:
@@ -176,7 +212,16 @@ Router checks:
 Mac script checks:
 
 - `./scripts/mac/codex-bridge-health.sh`
+- `./scripts/mac/middaycommander-health.sh`
+- `./scripts/mac/middaycommander-morning-check.sh`
 - `./scripts/mac/codex-bridge-daily-report.sh "done: router healthy" "next: review logs"`
+
+Expected MiddayCommander outcomes:
+
+- router reachable from the Mac at `http://192.168.1.15:8787/health`
+- `codex-bridge.service` active on `192.168.1.15`
+- `~/projects/MiddayCommander` present on `192.168.1.30`
+- MiddayCommander branch, head, and worktree cleanliness visible in the health output
 
 Gemini push-path check:
 

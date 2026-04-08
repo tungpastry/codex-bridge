@@ -45,6 +45,8 @@ This repo exists to make mixed coding and operations work less noisy and less am
 
 The initial target repository is `MiddayCommander`, but the router is generic enough for other repos with the same workflow shape.
 
+MiddayCommander now uses `codex-bridge` as the forward-looking home for new DevOps automation, health checks, and operator SOPs. The application code stays in the `MiddayCommander` repo, while new deploy and health workflows live here.
+
 ## System Overview
 
 `codex-bridge` is built for this three-node topology:
@@ -234,6 +236,28 @@ sudo systemctl enable --now codex-bridge.service
 sudo systemctl status codex-bridge.service --no-pager --full
 ```
 
+### MiddayCommander Deploy + Health from the Mac mini
+
+Create a local target override if you need custom values:
+
+```bash
+cp targets/middaycommander.env.example targets/middaycommander.env
+```
+
+Then run the MiddayCommander-specific wrappers:
+
+```bash
+./scripts/mac/middaycommander-deploy-router.sh
+./scripts/mac/middaycommander-health.sh
+./scripts/mac/middaycommander-morning-check.sh
+```
+
+These wrappers treat `codex-bridge` as the DevOps source of truth for MiddayCommander:
+
+- the deploy wrapper syncs the local `codex-bridge` source tree to `/home/nexus/codex-bridge` on `192.168.1.15`
+- the health wrapper verifies router reachability, `codex-bridge.service`, and the MiddayCommander repo state on `192.168.1.30`
+- the morning check writes a timestamped Markdown report under `storage/reports/`
+
 ### Classify a coding task
 
 ```bash
@@ -302,6 +326,9 @@ See [docs/api-reference.md](docs/api-reference.md) for full request and response
 | Script | Purpose |
 | --- | --- |
 | `scripts/mac/codex-bridge-health.sh` | check router health |
+| `scripts/mac/middaycommander-deploy-router.sh` | sync and restart the MiddayCommander router stack on UbuntuDesktop |
+| `scripts/mac/middaycommander-health.sh` | verify the MiddayCommander 3-node topology from the Mac mini |
+| `scripts/mac/middaycommander-morning-check.sh` | write a timestamped MiddayCommander morning health report |
 | `scripts/mac/codex-bridge-triage-log.sh` | fetch remote journalctl logs and summarize them |
 | `scripts/mac/codex-bridge-summarize-diff.sh` | summarize `git diff main...HEAD` |
 | `scripts/mac/codex-bridge-make-brief.sh` | generate Markdown brief for Codex App |
@@ -328,6 +355,7 @@ See [docs/api-reference.md](docs/api-reference.md) for full request and response
 
 Short-term:
 
+- keep expanding MiddayCommander-specific DevOps wrappers and SOPs from this repo
 - tighten structured validation for Gemini plan JSON
 - add more service-aware safe command templates
 - expand MiddayCommander-focused examples

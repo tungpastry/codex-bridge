@@ -19,6 +19,11 @@ Recommended flow:
 5. Implement the patch manually in Codex App or your editor.
 6. Run local tests or smoke checks.
 
+MiddayCommander-specific note:
+
+- coding work still stays in the `MiddayCommander` repo
+- new deploy and health automation for that repo now lives in `codex-bridge`
+
 Why this route exists:
 
 - coding work benefits from cleaner context and tighter acceptance criteria
@@ -79,6 +84,13 @@ Recommended flow:
 4. Run `scripts/mac/codex-bridge-daily-report.sh`.
 5. Share the generated Markdown report with the team or keep it as a local operations record.
 
+MiddayCommander Deploy + Health path:
+
+1. Run `scripts/mac/middaycommander-deploy-router.sh` when the router deployment needs refreshing on `192.168.1.15`.
+2. Run `scripts/mac/middaycommander-health.sh` to verify the 3-node topology.
+3. Run `scripts/mac/middaycommander-morning-check.sh` to save a timestamped Markdown health report.
+4. Use the report as the operator handoff artifact instead of re-checking the same state manually.
+
 Expected outputs:
 
 - short router health summary
@@ -91,6 +103,7 @@ Things that stay true in every workflow:
 
 - `codex-bridge` preprocesses first
 - route choice is explicit
+- MiddayCommander DevOps ownership now starts here, not in the product repo
 - Codex App is never auto-controlled
 - Gemini CLI is only used within the safe-command boundary
 - risky work is blocked instead of being pushed through “just in case”

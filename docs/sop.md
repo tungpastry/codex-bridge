@@ -12,16 +12,17 @@ Goal:
 
 Checklist:
 
-1. Run `scripts/mac/codex-bridge-health.sh`.
-2. Run `scripts/mac/codex-bridge-morning-check.sh`.
-3. Review inactive, failed, or restarting services on `UbuntuServer`.
-4. Check whether router health, logs, or network reachability look abnormal.
-5. Escalate risky production findings to a human before any change is made.
+1. Run `scripts/mac/middaycommander-health.sh`.
+2. Run `scripts/mac/middaycommander-morning-check.sh`.
+3. Review the Markdown report under `storage/reports/`.
+4. Review inactive, failed, or restarting services on `UbuntuDesktop` or `UbuntuServer`.
+5. Check whether router health, LAN reachability, or the MiddayCommander server repo state look abnormal.
+6. Escalate risky production findings to a human before any change is made.
 
 Expected output:
 
-- short health JSON or pretty summary
-- quick list of service states
+- Markdown report with `Router`, `UbuntuDesktop`, `UbuntuServer`, `MiddayCommander Repo`, `Open Issues`, and `Next Actions`
+- clear branch/head/worktree visibility for the MiddayCommander repo on `192.168.1.30`
 - obvious operator next steps
 
 ## Build SOP
@@ -38,6 +39,11 @@ Checklist:
 4. Keep the implementation scoped to the stated goal and constraints.
 5. Run local tests, smoke checks, or relevant validation commands.
 6. Review the patch before commit.
+
+MiddayCommander note:
+
+- build/test/commit work stays in the MiddayCommander repo
+- new deploy and health runbooks for that repo now live in `codex-bridge`
 
 Stop conditions:
 

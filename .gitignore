@@ -1,4 +1,6 @@
 .env
+targets/*.env
+!targets/*.env.example
 .venv/
 __pycache__/
 *.pyc
