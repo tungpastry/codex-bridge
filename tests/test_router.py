@@ -227,7 +227,8 @@ class RouterTestCase(unittest.TestCase):
             self.assertGreaterEqual(payload["timing"]["gemini_cli_duration_ms"], 0)
             self.assertGreaterEqual(
                 payload["timing"]["total_duration_ms"],
-                payload["timing"]["gemini_cli_duration_ms"])
+                payload["timing"]["gemini_cli_duration_ms"],
+            )
             self.assertIn("## Timing", payload["final_markdown"])
 
             runs_dir = temp_root / "storage" / "gemini_runs"
