@@ -1,219 +1,185 @@
 # Troubleshooting
 
-This document captures the most common problems seen while bringing up `codex-bridge` across the Mac mini and Ubuntu nodes.
+This document captures the most important issues seen while bringing up and upgrading `codex-bridge`.
+
+Related docs:
+
+- [Deployment](./deployment.md)
+- [Architecture](./architecture.md)
+- [API Reference](./api-reference.md)
+- [Vietnamese version](./troubleshooting-vi.md)
 
 ## The Router Will Not Start
 
 ### Symptom
 
-`uvicorn` exits during startup and mentions `pydantic_settings` or `.env` parsing.
+- `systemd` shows the service starting and then dying
+- local `curl http://127.0.0.1:8787/health` returns connection refused
 
-### Likely cause
+### Likely causes
 
-A CSV setting such as `CORS_ALLOW_ORIGINS_RAW` or `ALLOWED_RESTART_SERVICES_RAW` was written in an invalid format.
+- invalid `.env` values
+- unreadable profile files
+- missing dependencies
+- bad runtime paths
 
 ### Fix
 
-Use comma-separated values, not a JSON array:
+- check `journalctl -u codex-bridge.service -n 120 --no-pager`
+- confirm `PROMPTS_DIR`, `STORAGE_DIR`, `RUN_INDEX_DB_PATH`, and `PROFILES_DIR`
+- verify startup migration logs are present
 
-```env
-CORS_ALLOW_ORIGINS_RAW=http://localhost,http://127.0.0.1
-ALLOWED_RESTART_SERVICES_RAW=codex-bridge,postgresql,nginx
-```
-
-## The Mac Uses the Wrong Prompt or Storage Path
+## Hidden AppleDouble Profile Files Break the Loader
 
 ### Symptom
 
-The app on the Mac seems to point at `/home/nexus/codex-bridge/...` instead of local repo paths.
+- the service fails after syncing files from macOS
+- profile loading throws a decode error
 
 ### Likely cause
 
-The `.env` was copied from the Ubuntu deployment environment.
+- `._*.yaml` files or `.DS_Store` files were copied into the profiles directory
 
 ### Fix
 
-Update `.env` on the Mac or rely on the local fallback logic:
-
-```env
-PROMPTS_DIR=/Users/macadmin/Documents/New project/codex-bridge/prompts
-STORAGE_DIR=/Users/macadmin/Documents/New project/codex-bridge/storage
-```
+- remove hidden macOS sidecar files from `app/profiles/`
+- keep deployment sync rules from copying `._*` and `.DS_Store`
+- use the updated profile loader that ignores hidden files
 
 ## Health Works Locally but Not Over LAN
 
 ### Symptom
 
-`curl http://127.0.0.1:8787/health` works on UbuntuDesktop, but `curl http://192.168.1.15:8787/health` fails from the Mac.
+- `curl http://127.0.0.1:8787/health` works on the router
+- `curl http://192.168.1.15:8787/health` fails from the Mac
 
 ### Likely cause
 
-- local firewall
-- wrong bind address
-- stale LAN IP
+- firewall or LAN reachability issue
 
 ### Fix
 
-Check:
+- confirm the app is listening on `0.0.0.0:8787`
+- check UFW or other firewall rules
+- confirm the router IP did not change
 
-```bash
-sudo systemctl status codex-bridge.service --no-pager --full
-ss -ltnp | grep 8787
-sudo ufw status verbose
-```
-
-The service should bind to `0.0.0.0:8787`.
-
-## `ssh MacMiniGemini` Fails With Connection Refused
+## `ssh MacMiniGemini` Fails with `Connection refused`
 
 ### Symptom
 
-UbuntuDesktop cannot push jobs to the Mac.
+- router push path to the Mac fails immediately
 
 ### Likely cause
 
-Remote Login is disabled on the Mac or SSH key trust is missing.
+- Remote Login is disabled on the Mac
+- SSH alias or key setup is incomplete
 
 ### Fix
 
-On the Mac:
+- enable Remote Login on the Mac
+- confirm `~/.ssh/config` contains `MacMiniGemini`
+- test `ssh MacMiniGemini 'hostname && whoami'`
 
-```bash
-sudo systemsetup -setremotelogin on
-```
-
-Then make sure the UbuntuDesktop public key is in `~/.ssh/authorized_keys` on the Mac and retest:
-
-```bash
-ssh MacMiniGemini 'hostname && whoami'
-```
-
-## Gemini Runner Fails With `node: No such file or directory`
+## Gemini Runner Fails with `node: No such file or directory`
 
 ### Symptom
 
-`codex-bridge-run-gemini.sh` starts over SSH but Gemini CLI does not launch.
+- Gemini CLI works in an interactive terminal
+- the same command fails through SSH or a script
 
 ### Likely cause
 
-Non-interactive SSH sessions on macOS often do not load the Homebrew PATH.
+- non-interactive shells do not load the Homebrew `PATH`
 
 ### Fix
 
-The runner already bootstraps Homebrew PATH. If you still see this error, confirm:
+- bootstrap Homebrew shell environment inside the runner
+- confirm the script can find both `gemini` and `node`
 
-```bash
-ls -l /opt/homebrew/bin/gemini
-ls -l /opt/homebrew/bin/node
-```
-
-Also confirm Homebrew is installed under `/opt/homebrew`.
-
-## Gemini Returns Invalid JSON
+## Gemini CLI Requests Browser Authentication
 
 ### Symptom
 
-The runner writes a blocked result saying Gemini did not return valid JSON or the extracted plan payload was invalid.
+- the runner blocks quickly with an authentication-related status
+- Gemini CLI outputs a browser-auth prompt
 
 ### Likely cause
 
-- Gemini CLI responded with non-JSON output
-- the JSON was wrapped unexpectedly
-- the run was interrupted mid-output
+- headless auth is not configured
 
 ### Fix
 
-Inspect these artifacts:
+- provide cached credentials or environment-based authentication
+- confirm the runner can export the required auth variables from `.env`
 
-- `storage/gemini_runs/<run_id>-gemini-output.json`
-- `storage/gemini_runs/<run_id>-plan.json`
-- `storage/gemini_runs/<run_id>-final.json`
-
-If the response is consistently malformed, tighten the prompt or run in mock mode to validate the rest of the pipeline.
-
-## Gemini Seems to Hang or Feel Slow
+## Gemini Returns Empty or Non-JSON Output
 
 ### Symptom
 
-The Mac runner appears stuck and it is unclear whether the delay is in Gemini itself or command execution.
-
-### Fix
-
-Inspect:
-
-- `timing_summary`
-- `storage/gemini_runs/<run_id>-timing.json`
-- `storage/gemini_runs/<run_id>-final.json`
-
-The timing object separates:
-
-- Gemini headless duration
-- safe command execution duration
-- total pipeline duration
-
-If the run times out or receives `TERM`, the runner now tries to emit partial timing artifacts instead of losing the whole trace.
-
-## `push_gemini_to_mac.sh` Fails With Shell Syntax Error
-
-### Symptom
-
-You run:
-
-```bash
-./scripts/push_gemini_to_mac.sh --job-file <path-to-gemini-job.json>
-```
-
-and Bash reports `syntax error near unexpected token newline`.
+- the run blocks before safe execution starts
+- `final_markdown` says Gemini did not return valid JSON
 
 ### Likely cause
 
-`<path-to-gemini-job.json>` is a placeholder, not a literal argument.
+- Gemini output includes banner text or non-JSON lines
+- model output is malformed
 
 ### Fix
 
-Use a real path:
+- review `<run_id>-gemini-output.json`
+- confirm the runner is using the JSON extraction path that tolerates banner text
+- verify the prompt still instructs Gemini to return JSON only
 
-```bash
-./scripts/push_gemini_to_mac.sh --job-file storage/gemini_runs/manual-push-test-job.json
-```
-
-## `dispatch/task` Returns 500
+## Internal Callback Does Not Update the Run Index
 
 ### Symptom
 
-The router returns an internal server error when building a Gemini job.
+- the Mac runner prints a final result
+- `/v1/runs/{run_id}` still shows `awaiting_execution`
 
 ### Likely cause
 
-Prompt rendering failed or the prompt file contains unescaped braces in JSON examples.
+- `CODEX_BRIDGE_BASE_URL` is missing or wrong on the Mac
+- `CODEX_BRIDGE_INTERNAL_API_TOKEN` does not match the router
 
 ### Fix
 
-Check:
+- confirm `CODEX_BRIDGE_BASE_URL=http://192.168.1.15:8787`
+- confirm the token is identical on both hosts
+- retry the run and inspect router logs
 
-```bash
-journalctl -u codex-bridge.service -n 100 --no-pager
-```
-
-Then review the relevant prompt file under `prompts/`, especially `build_gemini_job.txt`.
-
-## The Service Is Running but the Repo Update Did Not Take Effect
+## The Wrong Host Is Used for `systemctl` or `journalctl`
 
 ### Symptom
 
-New code exists under `/home/nexus/codex-bridge`, but the router behavior still looks old.
+- the run reaches execution
+- service commands are sent to the wrong node
 
 ### Likely cause
 
-The systemd service was not restarted after pulling code.
+- the relevant profile is missing `preferred_command_hosts`
+- the router is running an older prompt/profile version
 
 ### Fix
 
-```bash
-cd /home/nexus/codex-bridge
-git pull origin main
-source .venv/bin/activate
-pip install -r requirements.txt
-sudo systemctl restart codex-bridge.service
-sudo systemctl status codex-bridge.service --no-pager --full
-```
+- confirm the profile contains the expected host preferences
+- redeploy the router if the prompt or profile changed
+- inspect `gemini_job.preferred_command_hosts` in the dispatch response
+
+## The Service Is Running but the Update Did Not Take Effect
+
+### Symptom
+
+- `systemctl status` looks healthy
+- behavior still matches an older code version
+
+### Likely cause
+
+- the source tree was synced but the service was not restarted
+- the router host is using a synced tree rather than a git checkout
+
+### Fix
+
+- confirm the updated files actually exist on the router
+- restart `codex-bridge.service`
+- verify the new behavior through `/health?depth=full` or a route-specific smoke test

@@ -1,28 +1,32 @@
 # Tutorial: Coding Task to Codex Brief
 
-This tutorial walks through the intended v1 path for coding work.
+This tutorial shows the intended path for implementation-heavy work.
+
+Related docs:
+
+- [Workflow](../workflow.md)
+- [API Reference](../api-reference.md)
+- [Vietnamese version](./coding-task-vi.md)
 
 ## Goal
 
-Turn a noisy bug report into a brief that is clean enough to paste into Codex App.
+Turn a noisy coding task into a clean brief for Codex App.
 
 ## Example Scenario
 
-You have a `MiddayCommander` bug:
+You have a bug in `ExampleService`:
 
-- title: `Transfer retry panic`
-- context: `Go test fails with panic after remote retry exhaustion`
+- title: `Retry loop panic`
+- context: `Tests fail after retry exhaustion in the transfer path`
 - constraint: `keep the patch small`
 
 ## Step 1: Save the raw context
 
-Create a text file with the issue details:
-
 ```bash
-cat > /tmp/middaycommander-panic.txt <<'EOF'
-Go test fails with panic after remote retry exhaustion in the transfer queue.
+cat > /tmp/example-retry-panic.txt <<'EOF'
+Tests fail after retry exhaustion in the transfer path.
 The panic appears after retries are exhausted.
-Keep the patch small and avoid redesigning the retry engine.
+Keep the patch small and avoid redesigning the retry logic.
 EOF
 ```
 
@@ -30,38 +34,35 @@ EOF
 
 ```bash
 ./scripts/mac/codex-bridge-make-brief.sh \
-  "Fix MiddayCommander transfer retry panic" \
-  "MiddayCommander" \
-  /tmp/middaycommander-panic.txt
+  "Fix ExampleService retry panic" \
+  "ExampleService" \
+  /tmp/example-retry-panic.txt
 ```
 
 ## Step 3: Review the generated Markdown
 
 The output should include:
 
-- `Task`
-- `Repo`
-- `Task Type`
-- `Goal`
-- `Context`
-- `Constraints`
-- `Acceptance Criteria`
-- `Likely Files`
-- `Notes`
+- task summary
+- repo
+- task type
+- goal
+- constraints
+- acceptance criteria
+- likely files
 
 ## Step 4: Paste into Codex App
 
-Paste the generated Markdown into Codex App and continue the implementation workflow there.
+Paste the generated Markdown into Codex App and continue the implementation manually.
 
-## Optional Step: Use Dispatch Instead
-
-If you want routing and artifact generation in one call:
+## Optional: Use Dispatch Instead
 
 ```bash
-./scripts/mac/codex-bridge-auto.sh task \
-  "Fix MiddayCommander transfer retry panic" \
-  "MiddayCommander" \
-  /tmp/middaycommander-panic.txt
+./scripts/mac/codex-bridge-dispatch.sh \
+  task \
+  "Fix ExampleService retry panic" \
+  ExampleService \
+  /tmp/example-retry-panic.txt
 ```
 
-If the route is `codex`, the script prints the final brief. If the route is `human`, stop and review the escalation reason.
+If the route is `codex`, use `codex_brief_markdown`. If the route is `human`, stop and review the escalation reason.

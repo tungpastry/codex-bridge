@@ -1,169 +1,89 @@
 # Upgrade Blueprint v1
 
-Tai lieu nay tong hop nhung gi da duoc them vao `codex-bridge` trong ban nang cap production v1.
+This document summarizes what the production upgrade changed in the shipped system. It is a completed architecture note, not a future plan.
 
-## Muc tieu
+Related docs:
 
-Nang cap project tu mot router v1 thuc dung thanh mot internal routing platform production-ready hon, nhung van giu nguyen dinh huong:
+- [Architecture](./architecture.md)
+- [API Reference](./api-reference.md)
+- [Deployment](./deployment.md)
+- [Vietnamese version](./upgrade-blueprint-v1-vi.md)
 
-- heuristic-first
-- fail-closed
-- Codex App van la manual paste flow
-- Gemini chi duoc thuc thi trong typed safe-command boundary
-- run co trace, artifact, va index de query
+## Goals Completed
 
-## Nhung thay doi lon
+The v1 production upgrade moved `codex-bridge` from a lightweight router prototype toward a more production-ready internal platform while preserving the original philosophy:
 
-### 1. Package structure ro hon
+- heuristic-first routing
+- fail-closed safety
+- no Codex App UI automation
+- no arbitrary shell execution from Gemini
+- observable runs with persisted artifacts
 
-Project da duoc tach thanh cac package sau:
+## Major Changes Delivered
 
-- `app/api/routes`
-- `app/core`
-- `app/policy`
-- `app/builders`
-- `app/execution`
-- `app/artifacts`
-- `app/index`
-- `app/profiles`
-- `app/services`
-- `app/schemas`
+### 1. Production Package Structure
 
-`app/routes/*` van duoc giu lai lam compatibility wrappers.
+The app is now organized into clear packages for API routes, policy, builders, execution, artifacts, profiles, runtime bootstrap, and run index management.
 
-### 2. SQLite run index
+### 2. SQLite Run Index
 
-Run index duoc them vao router host de query lich su run.
+The router now owns a SQLite run index with migrations and query APIs. This adds:
 
-Bang chinh:
+- persistent run summaries
+- command and rule history
+- artifact indexing
+- admin metrics
 
-- `runs`
-- `run_commands`
-- `run_rules`
-- `artifacts`
+### 3. Decision Trace
 
-Migrations:
+Heuristic decisions are now explainable through `decision_trace` in classify, log, diff, and dispatch responses.
 
-- `001_init.sql`
-- `002_indexes.sql`
+### 4. Dispatch Persistence
 
-Migrations tu apply khi startup va co log migration ro rang.
+`dispatch` now creates `run_id`, stores request and response snapshots, indexes rules, and tracks generated artifacts.
 
-### 3. Decision trace
+### 5. Typed Execution Model
 
-Routing khong con la hop den duy nhat. Response classify/log/diff/dispatch hien co:
+Gemini plans are now constrained to typed command specifications instead of free-form shell instructions.
 
-- `decision_trace.matched_rules`
-- `decision_trace.confidence`
+### 6. Internal Execution Callback
 
-Dieu nay giup operator va reviewer hieu vi sao router dua ra quyet dinh.
+The Mac runner updates the router-side run index through an authenticated internal callback so execution results remain observable from the router host.
 
-### 4. Dispatch persistence
+### 7. Runs and Metrics APIs
 
-`/v1/dispatch/task` hien tai:
+The platform now exposes:
 
-- tao `run_id`
-- luu request snapshot
-- luu run metadata ban dau
-- luu matched rules
-- luu response snapshot
-- luu artifact metadata
+- `/v1/runs`
+- `/v1/runs/{run_id}`
+- `/v1/runs/{run_id}/artifacts`
+- `/v1/admin/metrics`
+- `/health?depth=full`
 
-Artifact taxonomy da chot:
+### 8. Profiles and Preferred Hosts
 
-- `request_snapshot`
-- `response_snapshot`
-- `codex_brief`
-- `daily_report`
-- `gemini_job`
-- `execution_plan`
-- `execution_result`
-- `timing`
-- `final_result`
+YAML profiles now provide minimal repo-specific hints. They can guide likely files, prompt hints, default safe services, and preferred command hosts.
 
-### 5. Typed execution model
+## Design Choices Preserved
 
-Execution da duoc typed hoa qua:
+The upgrade did not change these core boundaries:
 
-- `ExecutionPlan`
-- `ExecutionCommand`
-- `ExecutionResult`
-- `ExecutionBatchResult`
-- `ExecutionCallbackRequest`
+- Codex App remains a manual implementation workflow
+- Gemini remains inside a strict safe command boundary
+- risky work still escalates to `human`
+- the system is still intentionally lightweight and local-first
 
-Gemini khong duoc phep tra shell text tu do. Moi command deu phai di qua:
+## Operational Notes
 
-- `host`
-- `command_id`
-- `args`
-- `reason`
+- startup now logs migration details for the run index
+- run artifacts on disk remain the full audit trail
+- SQLite is the query layer, not a replacement for filesystem artifacts
+- timing telemetry distinguishes model latency from execution latency
 
-### 6. Internal callback
+## Known Limits Still Present
 
-Mac runner cap nhat ket qua ve router bang internal callback:
-
-- `POST /v1/internal/runs/{run_id}/execution`
-
-Properties:
-
-- co token
-- co `phase`
-- idempotent khi retry
-- khong duplicate `run_commands`
-
-`run_commands` duoc upsert theo `(run_id, ordinal)`.
-
-### 7. Runs va metrics APIs
-
-Da them:
-
-- `GET /v1/runs`
-- `GET /v1/runs/{run_id}`
-- `GET /v1/runs/{run_id}/artifacts`
-- `GET /v1/admin/metrics`
-- `GET /health?depth=full`
-
-`GET /v1/runs` mac dinh sort theo `created_at DESC`.
-
-### 8. Profiles toi gian
-
-Da them profile YAML de lam hint cho repo:
-
-- `codex-bridge.yaml`
-- `middaycommander.yaml`
-
-Profiles chi duoc dung de bo sung context, khong duoc pha vo safety policy.
-
-## Vi sao ban nang cap nay quan trong
-
-Truoc day, he thong da chay duoc, nhung con mot so diem mo ho:
-
-- kho tra cuu lich su run
-- kho hieu vi sao router ra quyet dinh
-- execution result chua duoc normalize ro rang
-- docs va test chua phan anh het flow moi
-
-Sau ban nang cap nay, `codex-bridge` van don gian nhung ro hon:
-
-- de debug deploy hon
-- de tra cuu incident hon
-- de review routing behavior hon
-- de audit Gemini safe execution hon
-
-## Cac nguyen tac van duoc giu nguyen
-
-- khong full automation dieu khien Codex App
-- khong arbitrary shell tu Gemini
-- khong thay heuristic bang mandatory LLM routing
-- khong dua Redis/Celery/queue vao v1
-- khong over-engineer profile system
-
-## Ghi chu van hanh
-
-Neu ban gap van de sau deploy, uu tien check:
-
-1. `/health?depth=full`
-2. startup migration log
-3. `/v1/runs?limit=10`
-4. artifact files trong `storage/`
-5. callback token va SSH path cua Mac runner
+- no queue or worker fleet
+- no distributed job orchestration
+- no browser automation
+- no AppleScript
+- no attempt to auto-resolve ambiguous or risky production intent

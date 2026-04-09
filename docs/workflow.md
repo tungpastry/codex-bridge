@@ -1,140 +1,116 @@
 # Workflow
 
-This document describes the four core workflows that `codex-bridge` is designed to support in v1.
+This document describes the core generic workflows supported by `codex-bridge`.
 
-## 1. Build New Feature or Bugfix
+Related docs:
 
-Typical target:
+- [README](../README.md)
+- [Architecture](./architecture.md)
+- [Deployment](./deployment.md)
+- [SOP](./sop.md)
+- [MiddayCommander target docs](./targets/middaycommander.md)
+- [Vietnamese version](./workflow-vi.md)
 
-- `MiddayCommander` implementation work
-- failing build or test triage
-- focused code review that likely leads to a patch
+## 1. Coding Work to Codex
 
-Recommended flow:
+Typical use cases:
 
-1. Gather the task title, repo name, and relevant context.
-2. Call `scripts/mac/codex-bridge-dispatch.sh task ...` or `scripts/mac/codex-bridge-make-brief.sh ...`.
-3. If the route is `codex`, capture `codex_brief_markdown`.
-4. Paste that brief into Codex App.
-5. Implement the patch manually in Codex App or your editor.
-6. Run local tests or smoke checks.
+- feature implementation
+- bugfix work
+- code review that is likely to result in a patch
+- setup work that still requires code changes
 
-MiddayCommander-specific note:
+Recommended path:
 
-- coding work still stays in the `MiddayCommander` repo
-- new deploy and health automation for that repo now lives in `codex-bridge`
+1. gather a task title, repo name, and raw context
+2. call `scripts/mac/codex-bridge-dispatch.sh task ...` or `scripts/mac/codex-bridge-make-brief.sh ...`
+3. if the route is `codex`, review `codex_brief_markdown`
+4. paste the brief into Codex App manually
+5. implement and validate the patch in the target repo
 
 Why this route exists:
 
-- coding work benefits from cleaner context and tighter acceptance criteria
-- the router removes noisy logs and raw issue chatter before Codex sees the problem
-- manual review remains part of the flow
+- coding tasks benefit from clean structured context
+- manual implementation and review still stay in the loop
+- `codex-bridge` handles routing and context cleanup without pretending code changes are safe to auto-run
 
 Stop conditions:
 
-- if the task includes production auth, schema, firewall, or destructive data signals, escalate to `human`
-- if the task is actually an ops incident rather than a code change, reroute to `gemini`
+- if the task becomes a production-risk issue, route to `human`
+- if the task is really an ops investigation, reroute to `gemini`
 
-## 2. Incident Response
+## 2. Safe Ops Investigation with Gemini
 
-Typical target:
+Typical use cases:
 
-- runtime issue on `UbuntuServer`
-- failing `systemd` service
-- recent `journalctl` error triage
-- low-risk inspection and restart workflows
+- service health inspection
+- low-risk log review
+- port, disk, memory, and uptime checks
+- allowlisted service restart when the plan stays safe
 
-Recommended flow:
+Recommended path:
 
-1. Run `scripts/mac/codex-bridge-triage-log.sh <service>`.
-2. Review the JSON summary from `/v1/summarize/log`.
-3. If the route is `gemini`, run `scripts/mac/codex-bridge-auto.sh` or push a prepared Gemini job to the Mac.
-4. Let Gemini produce a structured plan with safe command IDs.
-5. Let `codex-bridge-exec-safe.sh` validate and run the approved commands.
-6. Review `final_markdown`, `timing_summary`, and the saved run artifacts.
+1. summarize the issue with `scripts/mac/codex-bridge-triage-log.sh` or `dispatch`
+2. confirm the route is `gemini`
+3. let the Mac runner call Gemini CLI headless
+4. validate the returned typed plan
+5. execute only allowed commands
+6. review `final_markdown`, timing, and saved artifacts
 
-What this workflow is good at:
+What this route is good at:
 
-- recent service health inspection
-- checking whether a service is active or failed
-- reading recent logs
-- inspecting port state, memory, disk, and uptime
-- restarting an allowlisted service if the plan remains safe
+- recent service inspection
+- low-risk operator workflows
+- explicit observability through run artifacts and run index entries
 
 Stop conditions:
 
-- if the response route becomes `human`
-- if the plan includes a forbidden command or host
-- if the issue involves production schema changes, auth changes, firewall changes, or destructive operations
+- the route becomes `human`
+- the plan references a forbidden host or command
+- the issue involves auth, firewall, schema, secrets, or destructive operations
 
-## 3. Daily Ops
+## 3. Daily Ops and Reporting
 
-Typical target:
+Typical use cases:
 
-- morning health checks
-- operator summaries
-- ongoing triage notes
-- end-of-day reporting
+- morning checks
+- lightweight operator reporting
+- short handoff summaries
+- repeated service visibility
 
-Recommended flow:
+Recommended path:
 
-1. Run `scripts/mac/codex-bridge-health.sh`.
-2. Run `scripts/mac/codex-bridge-morning-check.sh`.
-3. Collect any completed items, open issues, or next actions.
-4. Run `scripts/mac/codex-bridge-daily-report.sh`.
-5. Share the generated Markdown report with the team or keep it as a local operations record.
-
-MiddayCommander Deploy + Health path:
-
-1. Run `scripts/mac/middaycommander-deploy-router.sh` when the router deployment needs refreshing on `192.168.1.15`.
-2. Run `scripts/mac/middaycommander-health.sh` to verify the 3-node topology.
-3. Run `scripts/mac/middaycommander-morning-check.sh` to save a timestamped Markdown health report.
-4. Use the report as the operator handoff artifact instead of re-checking the same state manually.
+1. run `scripts/mac/codex-bridge-health.sh`
+2. run `scripts/mac/codex-bridge-morning-check.sh`
+3. collect completed items, open issues, and next actions
+4. run `scripts/mac/codex-bridge-daily-report.sh`
 
 Expected outputs:
 
-- short router health summary
-- service state summary
-- Markdown report with `Done`, `Open Issues`, and `Next Actions`
+- a short health summary
+- operator-readable Markdown
+- queryable runs and artifacts when dispatch or Gemini automation is involved
 
-## 4. MiddayCommander Release
+## 4. Generic Target Integration Workflow
 
-Typical target:
+`codex-bridge` is designed to support target repositories without making them part of the core architecture docs.
 
-- publish a tagged MiddayCommander build to GitHub
-- promote the Linux server artifact to UbuntuServer
-- expose the promoted release state through health checks
+The generic integration model is:
 
-Recommended flow:
+1. define a profile with repo hints and preferred command hosts if needed
+2. keep application code in the target repo
+3. keep internal routing, health wrappers, and ops automation in `codex-bridge`
+4. document target-specific deploy and health flows under `docs/targets/`
 
-1. Create an annotated tag in the local MiddayCommander repo.
-2. Run `scripts/mac/middaycommander-release.sh --tag <tag> --dry-run`.
-3. Run `scripts/mac/middaycommander-release.sh --tag <tag>` for the full release.
-4. Run `scripts/mac/middaycommander-health.sh` to confirm repo health and release health together.
-5. Run `scripts/mac/middaycommander-morning-check.sh` if you want a saved operator handoff report.
-
-What this workflow is good at:
-
-- enforcing clean repo and annotated-tag rules
-- publishing to `tungpastry/MiddayCommander` without touching upstream brew config
-- keeping promoted Linux artifacts under `/home/nexus/releases/middaycommander`
-- making the currently promoted binary visible in normal health output
-
-Stop conditions:
-
-- if the MiddayCommander repo is dirty
-- if the tag is missing, lightweight, or not at `HEAD`
-- if `gh` or `goreleaser` is missing on the Mac
-- if the GitHub release already exists or the server release directory already exists
+For a concrete example, see [MiddayCommander target docs](./targets/middaycommander.md).
 
 ## Cross-Workflow Notes
 
-Things that stay true in every workflow:
+These rules stay true in every workflow:
 
-- `codex-bridge` preprocesses first
 - route choice is explicit
-- MiddayCommander DevOps ownership now starts here, not in the product repo
-- release health and repo health are related but distinct views
-- Codex App is never auto-controlled
-- Gemini CLI is only used within the safe-command boundary
-- risky work is blocked instead of being pushed through “just in case”
+- risky work is blocked instead of improvised
+- Codex App stays manual
+- Gemini is limited to typed safe command execution
+- run artifacts plus the SQLite run index make execution observable
+- the router remains heuristic-first rather than model-first

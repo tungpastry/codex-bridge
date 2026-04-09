@@ -1,25 +1,25 @@
-# Deployment
+# Triển Khai
 
-This document describes the current deployment model for `codex-bridge` after the production upgrade foundations landed.
+Tài liệu này mô tả mô hình triển khai hiện tại của `codex-bridge` sau nâng cấp production.
 
-Related docs:
+Tài liệu liên quan:
 
 - [README](../README.md)
-- [Architecture](./architecture.md)
-- [Troubleshooting](./troubleshooting.md)
-- [Vietnamese version](./deployment-vi.md)
+- [Kiến trúc](./architecture-vi.md)
+- [Khắc phục sự cố](./troubleshooting-vi.md)
+- [English version](./deployment.md)
 
-## Target Topology
+## Topology Mục Tiêu
 
-| Node | Address | Purpose |
+| Node | Địa chỉ | Mục đích |
 | --- | --- | --- |
 | Mac mini | `192.168.1.7` | Codex App, Gemini CLI runner, operator scripts |
 | UbuntuDesktop | `192.168.1.15` | router host, SQLite run index owner |
 | UbuntuServer | `192.168.1.30` | runtime node, services, logs, database |
 
-## 1. Deploy the Router on UbuntuDesktop
+## 1. Deploy Router trên UbuntuDesktop
 
-Standard git-based deployment:
+Flow chuẩn theo git:
 
 ```bash
 cd /home/nexus
@@ -31,7 +31,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Core `.env` values on the router:
+Các biến `.env` quan trọng trên router:
 
 ```env
 APP_NAME=codex-bridge
@@ -53,9 +53,9 @@ ALLOWED_RESTART_SERVICES_RAW=codex-bridge,postgresql,nginx
 CODEX_BRIDGE_INTERNAL_API_TOKEN=replace-with-a-real-secret
 ```
 
-If your router host is updated through a file sync workflow instead of `git pull`, keep the same directory layout and environment values, then restart the service after syncing.
+Nếu router host của bạn được cập nhật bằng sync source tree thay vì `git pull`, hãy giữ nguyên layout thư mục và biến môi trường, sau đó restart service sau khi sync.
 
-## 2. Install the systemd Unit
+## 2. Cài systemd Unit
 
 ```bash
 sudo cp systemd/codex-bridge.service /etc/systemd/system/codex-bridge.service
@@ -64,7 +64,7 @@ sudo systemctl enable --now codex-bridge.service
 sudo systemctl status codex-bridge.service --no-pager --full
 ```
 
-Useful follow-up commands:
+Một số lệnh hay dùng:
 
 ```bash
 sudo systemctl restart codex-bridge.service
@@ -73,39 +73,39 @@ curl -sS http://127.0.0.1:8787/health | jq .
 curl -sS http://127.0.0.1:8787/health?depth=full | jq .
 ```
 
-## 3. Verify the Startup Migration Log
+## 3. Kiểm Tra Startup Migration Log
 
-On startup the router should log migration details for the SQLite run index. Look for values such as:
+Khi startup, router phải log chi tiết migration của SQLite run index. Bạn nên thấy các giá trị như:
 
 - `db_path`
 - `current_user_version`
 - `applied_migrations`
 - `final_user_version`
 
-Example check:
+Ví dụ:
 
 ```bash
 journalctl -u codex-bridge.service -n 80 --no-pager | rg run_index_migrations
 ```
 
-This log is important when debugging upgrades, DB creation, or misconfigured storage paths.
+Đây là log rất quan trọng khi debug upgrade, tạo DB mới, hoặc cấu hình sai đường dẫn storage.
 
-## 4. Confirm LAN Reachability
+## 4. Kiểm Tra LAN Reachability
 
-From the Mac mini:
+Từ Mac mini:
 
 ```bash
 curl -sS http://192.168.1.15:8787/health | jq .
 curl -sS http://192.168.1.15:8787/health?depth=full | jq .
 ```
 
-If that fails:
+Nếu lỗi:
 
-- confirm the service is listening on `0.0.0.0:8787`
-- check UFW or other firewall rules
-- confirm the router host is still `192.168.1.15`
+- xác nhận app đang nghe trên `0.0.0.0:8787`
+- kiểm tra UFW hoặc firewall khác
+- xác nhận router vẫn dùng IP `192.168.1.15`
 
-## 5. Prepare the Mac Runner
+## 5. Chuẩn Bị Mac Runner
 
 ```bash
 git clone git@github.com:tungpastry/codex-bridge.git
@@ -116,7 +116,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Recommended Mac-side `.env` values:
+Các biến `.env` nên có trên Mac:
 
 ```env
 CODEX_BRIDGE_BASE_URL=http://192.168.1.15:8787
@@ -128,11 +128,11 @@ CODEX_BRIDGE_GEMINI_TIMEOUT_SECONDS=180
 CODEX_BRIDGE_INTERNAL_API_TOKEN=use-the-same-secret-as-the-router
 ```
 
-If Gemini CLI is used headlessly, make sure authentication is already available through cached credentials or environment-based auth.
+Nếu Gemini CLI chạy headless, hãy chắc chắn auth đã sẵn sàng bằng cached credentials hoặc env-based auth.
 
-## 6. Configure the SSH Alias from UbuntuDesktop to Mac
+## 6. Cấu Hình SSH Alias Từ UbuntuDesktop sang Mac
 
-On `UbuntuDesktop`, configure `~/.ssh/config`:
+Trên `UbuntuDesktop`, cấu hình `~/.ssh/config`:
 
 ```sshconfig
 Host MacMiniGemini
@@ -142,7 +142,7 @@ Host MacMiniGemini
   StrictHostKeyChecking accept-new
 ```
 
-Test it:
+Kiểm tra:
 
 ```bash
 ssh MacMiniGemini 'hostname && whoami'
@@ -150,33 +150,33 @@ ssh MacMiniGemini 'hostname && whoami'
 
 ## 7. Router Push Path
 
-`scripts/push_gemini_to_mac.sh` reads these values from the router-side `.env`:
+`scripts/push_gemini_to_mac.sh` sẽ đọc các giá trị sau từ `.env` của repo trên router:
 
 - `CODEX_BRIDGE_PUSH_SSH_ALIAS`
 - `CODEX_BRIDGE_MAC_ROOT`
 
-Example smoke check:
+Ví dụ smoke check:
 
 ```bash
 cd /home/nexus/codex-bridge
 ./scripts/push_gemini_to_mac.sh --job-file storage/gemini_runs/manual-push-test-job.json
 ```
 
-## 8. Internal Callback Token Alignment
+## 8. Đồng Bộ Internal Callback Token
 
-The Mac runner updates the router through:
+Mac runner cập nhật router qua:
 
 - `POST /v1/internal/runs/{run_id}/execution`
 
-That means:
+Vì vậy:
 
-- the token on the Mac and the router must match
-- the token must not stay at the development default in production
-- a token mismatch will break run index updates even if execution succeeds locally
+- token trên Mac và trên router phải giống nhau
+- token không nên giữ giá trị dev mặc định khi chạy thật
+- nếu token lệch, run index sẽ không được cập nhật dù local execution vẫn thành công
 
 ## 9. Upgrade Flow
 
-Git-based upgrade:
+Flow theo git:
 
 ```bash
 cd /home/nexus/codex-bridge
@@ -187,7 +187,7 @@ sudo systemctl restart codex-bridge.service
 sudo systemctl status codex-bridge.service --no-pager --full
 ```
 
-Mac-side update:
+Cập nhật phía Mac:
 
 ```bash
 cd "/Users/macadmin/Documents/New project/codex-bridge"
@@ -196,11 +196,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-If your router uses a sync-based deployment instead of a git checkout, replace `git pull` with your sync step, then restart the service.
+Nếu router của bạn dùng source tree sync thay vì git checkout, hãy thay `git pull` bằng bước sync của bạn rồi restart service.
 
-## 10. Post-Deploy Verification
+## 10. Kiểm Tra Sau Deploy
 
-Recommended checks on the router:
+Các check nên chạy trên router:
 
 ```bash
 curl -sS http://127.0.0.1:8787/health | jq .
@@ -209,7 +209,7 @@ curl -sS 'http://127.0.0.1:8787/v1/admin/metrics' | jq .
 curl -sS 'http://127.0.0.1:8787/v1/runs?limit=5' | jq .
 ```
 
-Recommended end-to-end smoke from the Mac:
+Smoke test end-to-end từ Mac:
 
 ```bash
 ./scripts/mac/codex-bridge-auto.sh task \
@@ -218,19 +218,19 @@ Recommended end-to-end smoke from the Mac:
   /path/to/context.txt
 ```
 
-## 11. Rollback Notes
+## 11. Ghi Chú Rollback
 
-The current system is still intentionally simple:
+Hệ thống hiện vẫn cố tình đơn giản:
 
-- no Redis
-- no queue service
-- no separate worker fleet
-- no secondary database beyond the router-side SQLite run index
+- không có Redis
+- không có queue service
+- không có worker fleet riêng
+- không có DB thứ hai ngoài SQLite run index trên router
 
-Rollback usually means:
+Rollback cơ bản thường là:
 
-1. move the source tree back to the previous commit or synced version
-2. reinstall requirements if the dependency set changed
+1. đưa source tree về commit hoặc bản sync cũ hơn
+2. cài lại requirements nếu dependency set có đổi
 3. restart `codex-bridge.service`
 
-The SQLite run index can normally remain in place because the current migrations expand the observability surface without requiring an external migration service.
+SQLite run index hiện có thể giữ lại trong đa số trường hợp vì migration hiện tại chỉ mở rộng observability surface, không cần migration service riêng.

@@ -1,32 +1,32 @@
-# API Reference
+# API Reference Tiếng Việt
 
-This document describes the current public and internal APIs exposed by `codex-bridge`.
+Tài liệu này mô tả các API public và internal hiện tại của `codex-bridge`.
 
-Related docs:
+Tài liệu liên quan:
 
 - [README](../README.md)
-- [Architecture](./architecture.md)
-- [Deployment](./deployment.md)
-- [Troubleshooting](./troubleshooting.md)
-- [Vietnamese version](./api-reference-vi.md)
+- [Kiến trúc](./architecture-vi.md)
+- [Triển khai](./deployment-vi.md)
+- [Khắc phục sự cố](./troubleshooting-vi.md)
+- [English version](./api-reference.md)
 
-Base URLs commonly used in this environment:
+Base URL thường gặp:
 
 - local development: `http://127.0.0.1:8787`
-- router on UbuntuDesktop: `http://192.168.1.15:8787`
+- router trên UbuntuDesktop: `http://192.168.1.15:8787`
 
-## Conventions
+## Quy ước chung
 
-- All timestamps are UTC ISO strings.
-- `/v1/runs` is sorted by `created_at DESC` by default.
-- Dispatch and execution artifacts are stored on disk and indexed in SQLite.
-- Heuristic responses now include `decision_trace`.
+- Tất cả timestamp dùng UTC ISO string.
+- `/v1/runs` mặc định sort theo `created_at DESC`.
+- Artifact của dispatch và execution vừa được lưu trên disk, vừa được index trong SQLite.
+- Các response heuristic hiện có thêm `decision_trace`.
 
 ## GET /health
 
-Basic backward-compatible health check.
+Health check cơ bản, giữ backward-compatible.
 
-Example response:
+Ví dụ:
 
 ```json
 {
@@ -40,9 +40,9 @@ Example response:
 
 ## GET /health?depth=full
 
-Extended local diagnostics for the router.
+Trả thêm thông tin local diagnostics của router.
 
-Additional fields:
+Các field bổ sung:
 
 - `depth`
 - `index.status`
@@ -54,38 +54,11 @@ Additional fields:
 - `execution.allowed_hosts`
 - `execution.allowed_command_count`
 
-Example response:
-
-```json
-{
-  "status": "ok",
-  "service": "codex-bridge",
-  "llm_backend": "ollama",
-  "model": "gemma3:1b-it-qat",
-  "time": "2026-04-09T01:00:00Z",
-  "depth": "full",
-  "index": {
-    "status": "ok",
-    "db_path": "/home/nexus/codex-bridge/storage/index/runs.db",
-    "user_version": 2
-  },
-  "storage_dir": "/home/nexus/codex-bridge/storage",
-  "profiles": {
-    "count": 2,
-    "names": ["MiddayCommander", "codex-bridge"]
-  },
-  "execution": {
-    "allowed_hosts": ["local", "UbuntuDesktop", "UbuntuServer"],
-    "allowed_command_count": 15
-  }
-}
-```
-
 ## POST /v1/classify/task
 
-Classifies a task using heuristics and returns a routing recommendation.
+Phân loại task bằng heuristic và đề xuất route tiếp theo.
 
-Request fields:
+Request:
 
 - `title`
 - `context`
@@ -93,7 +66,7 @@ Request fields:
 - `source`
 - `constraints[]`
 
-Response fields:
+Response:
 
 - `task_type`
 - `severity`
@@ -107,9 +80,9 @@ Response fields:
 
 ## POST /v1/summarize/log
 
-Summarizes log text and suggests the likely next safe workflow.
+Tóm tắt log và gợi ý workflow an toàn tiếp theo.
 
-Request fields:
+Request:
 
 - `service`
 - `log_text`
@@ -118,7 +91,7 @@ Request fields:
 - `source`
 - `host`
 
-Response fields:
+Response:
 
 - `symptom`
 - `likely_cause`
@@ -131,9 +104,9 @@ Response fields:
 
 ## POST /v1/summarize/diff
 
-Summarizes a diff and provides a risk-oriented review view.
+Tóm tắt diff và đưa ra góc nhìn review theo risk.
 
-Request fields:
+Request:
 
 - `repo`
 - `diff_text`
@@ -141,7 +114,7 @@ Request fields:
 - `head_ref`
 - `context`
 
-Response fields:
+Response:
 
 - `summary`
 - `risk_level`
@@ -153,9 +126,9 @@ Response fields:
 
 ## POST /v1/compress/context
 
-Compresses noisy raw context into a short, paste-friendly summary.
+Nén raw context thành bản ngắn gọn, dễ paste.
 
-Response fields:
+Response:
 
 - `compressed_context`
 - `key_points[]`
@@ -163,9 +136,9 @@ Response fields:
 
 ## POST /v1/brief/codex
 
-Builds a Markdown brief for manual pasting into Codex App.
+Sinh Markdown brief để paste thủ công vào Codex App.
 
-Request fields include:
+Request có thể gồm:
 
 - `title`
 - `repo`
@@ -177,7 +150,7 @@ Request fields include:
 - `task_type`
 - `goal`
 
-Response fields:
+Response:
 
 - `brief_markdown`
 - `task_type`
@@ -185,9 +158,9 @@ Response fields:
 
 ## POST /v1/report/daily
 
-Builds a short Markdown daily report.
+Sinh báo cáo Markdown ngắn.
 
-Request fields:
+Request:
 
 - `repo`
 - `items[]`
@@ -195,7 +168,7 @@ Request fields:
 - `context`
 - `source`
 
-Response fields:
+Response:
 
 - `markdown`
 - `done[]`
@@ -204,18 +177,18 @@ Response fields:
 
 ## POST /v1/dispatch/task
 
-Main orchestration endpoint.
+Đây là endpoint orchestration chính.
 
-Responsibilities:
+Nó sẽ:
 
-- classify the input
-- create a `run_id`
-- persist request and response snapshots
-- persist matched rules into the run index
-- generate route-specific artifacts
-- return the selected route payload
+- phân loại input
+- tạo `run_id`
+- lưu request và response snapshots
+- persist matched rules vào run index
+- tạo artifact phù hợp với route
+- trả payload của route đã chọn
 
-Request fields:
+Request:
 
 - `title`
 - `input_kind`
@@ -225,7 +198,7 @@ Request fields:
 - `constraints[]`
 - `target_host`
 
-Response fields:
+Response:
 
 - `run_id`
 - `route`
@@ -241,7 +214,7 @@ Response fields:
 - `decision_trace`
 - `artifacts`
 
-Route outcomes:
+Các route outcomes:
 
 - `codex`
 - `gemini`
@@ -250,7 +223,7 @@ Route outcomes:
 
 ### Gemini job fields
 
-When the route is `gemini`, `gemini_job` can include:
+Khi route là `gemini`, `gemini_job` có thể gồm:
 
 - `run_id`
 - `job_id`
@@ -266,17 +239,17 @@ When the route is `gemini`, `gemini_job` can include:
 - `output_contract`
 - `prompt`
 
-`preferred_command_hosts` is used to steer Gemini toward the correct host for specific command IDs without allowing arbitrary host selection.
+`preferred_command_hosts` dùng để gợi Gemini chọn đúng host cho từng `command_id`, nhưng vẫn không cho phép host selection tùy tiện.
 
 ### Dispatch artifacts block
 
-The `artifacts` block contains metadata only:
+`artifacts` chỉ trả metadata, không trả nội dung file:
 
 - `request_snapshot_path`
 - `response_snapshot_path`
 - `generated[]`
 
-The current artifact taxonomy is:
+Taxonomy artifact hiện tại:
 
 - `request_snapshot`
 - `response_snapshot`
@@ -290,22 +263,22 @@ The current artifact taxonomy is:
 
 ## GET /v1/runs
 
-Lists persisted runs from the SQLite run index.
+Liệt kê các run đã được persist trong SQLite index.
 
-Query parameters:
+Query params:
 
 - `repo`
 - `route`
 - `status`
-- `date` in UTC `YYYY-MM-DD`
-- `limit` default `50`, max `200`
+- `date` theo UTC dạng `YYYY-MM-DD`
+- `limit` mặc định `50`, tối đa `200`
 - `offset`
 
-Default sorting:
+Sort mặc định:
 
 - `created_at DESC`
 
-Response shape:
+Response:
 
 ```json
 {
@@ -316,7 +289,7 @@ Response shape:
 }
 ```
 
-Each run summary includes high-signal fields such as:
+Mỗi run summary gồm các field quan trọng như:
 
 - `run_id`
 - `job_id`
@@ -341,16 +314,16 @@ Each run summary includes high-signal fields such as:
 
 ## GET /v1/runs/{run_id}
 
-Returns the full indexed view of a run.
+Trả đầy đủ góc nhìn indexed của một run.
 
-Response fields:
+Response:
 
 - `run`
 - `rules`
 - `commands`
 - `artifacts`
 
-`commands` are normalized execution results and can include:
+`commands` là normalized execution results và có thể gồm:
 
 - `ordinal`
 - `host`
@@ -369,18 +342,18 @@ Response fields:
 
 ## GET /v1/runs/{run_id}/artifacts
 
-Returns the artifact index entries for one run.
+Trả artifact index entries của một run.
 
-Response fields:
+Response:
 
 - `run_id`
 - `items[]`
 
 ## GET /v1/admin/metrics
 
-Returns aggregated metrics from the run index.
+Trả metrics tổng hợp từ run index.
 
-Response fields:
+Response:
 
 - `runs_total`
 - `runs_today`
@@ -393,15 +366,15 @@ Response fields:
 
 ## POST /v1/internal/runs/{run_id}/execution
 
-Internal callback used by the Mac runner to update the authoritative router-side run index.
+Đây là callback nội bộ để Mac runner cập nhật router-side run index.
 
-Requirements:
+Yêu cầu:
 
 - header `X-Codex-Bridge-Token`
-- typed JSON payload
+- JSON payload có kiểu rõ ràng
 - `phase`
 
-Request payload fields:
+Payload có thể gồm:
 
 - `phase`
 - `status`
@@ -417,14 +390,14 @@ Request payload fields:
 - `results[]`
 - `artifacts[]`
 
-`results[]` contain normalized execution records, not free-form shell transcripts.
+`results[]` là normalized execution records, không phải free-form shell transcript.
 
-## Execution Guarantees
+## Cam kết của execution boundary
 
-The current execution API contract preserves these boundaries:
+Contract execution hiện tại giữ các ranh giới sau:
 
-- Gemini does not submit arbitrary shell text for execution.
-- Commands must be expressed as typed `command_id + args`.
-- Allowed hosts are limited to `local`, `UbuntuDesktop`, and `UbuntuServer`.
-- Service restarts are limited by the configured restart allowlist.
-- Forbidden or ambiguous commands fail closed instead of executing.
+- Gemini không được gửi arbitrary shell để thực thi.
+- Command phải đi qua `command_id + args`.
+- Allowed hosts chỉ là `local`, `UbuntuDesktop`, `UbuntuServer`.
+- Restart chỉ được phép với service nằm trong allowlist.
+- Command bị cấm hoặc mơ hồ phải fail-closed thay vì thực thi.

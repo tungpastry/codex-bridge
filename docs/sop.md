@@ -1,69 +1,35 @@
 # SOP
 
-This document turns the main workflows into operator checklists that are easy to repeat.
+This document turns the main workflows into repeatable operator checklists.
 
-## Morning SOP
+Related docs:
+
+- [Workflow](./workflow.md)
+- [Troubleshooting](./troubleshooting.md)
+- [MiddayCommander target docs](./targets/middaycommander.md)
+- [Vietnamese version](./sop-vi.md)
+
+## Morning Check SOP
 
 Goal:
 
 - confirm the router is reachable
-- confirm key services are alive
+- confirm the key nodes are visible
 - catch obvious incidents early
 
 Checklist:
 
-1. Run `scripts/mac/middaycommander-health.sh`.
-2. Run `scripts/mac/middaycommander-morning-check.sh`.
-3. Review the Markdown report under `storage/reports/`.
-4. Review inactive, failed, or restarting services on `UbuntuDesktop` or `UbuntuServer`.
-5. Check whether router health, LAN reachability, or the MiddayCommander server repo state look abnormal.
-6. Escalate risky production findings to a human before any change is made.
+1. Run `scripts/mac/codex-bridge-health.sh`.
+2. Run `scripts/mac/codex-bridge-morning-check.sh`.
+3. Review the generated report under `storage/reports/`.
+4. Review failed, inactive, or suspicious services.
+5. Escalate risky production findings to a human before any change is made.
 
-Expected output:
-
-- Markdown report with `Router`, `UbuntuDesktop`, `UbuntuServer`, `MiddayCommander Repo`, `MiddayCommander Release`, `Open Issues`, and `Next Actions`
-- clear branch/head/worktree visibility for the MiddayCommander repo on `192.168.1.30`
-- clear release-root/current-version visibility for the promoted MiddayCommander binary on `192.168.1.30`
-- obvious operator next steps
-
-## Release SOP
+## Coding Intake SOP
 
 Goal:
 
-- produce a repeatable tagged release for MiddayCommander
-- publish it to GitHub
-- promote the Linux server binary without manual copy/paste deploy steps
-
-Checklist:
-
-1. Confirm the local MiddayCommander worktree is clean.
-2. Confirm the release tag is annotated and points to `HEAD`.
-3. Confirm `gh` and `goreleaser` are installed on the Mac mini.
-4. Run `scripts/mac/middaycommander-release.sh --tag <tag> --dry-run`.
-5. Run `scripts/mac/middaycommander-release.sh --tag <tag>`.
-6. Run `scripts/mac/middaycommander-health.sh` to confirm repo health and promoted release health.
-7. Save or review `storage/releases/<tag>/summary.json`, `publish.json`, and `promote.json` for handoff.
-
-Expected output:
-
-- a GitHub release in `tungpastry/MiddayCommander`
-- a promoted server release under `/home/nexus/releases/middaycommander/releases/<tag>/`
-- `current -> releases/<tag>` on UbuntuServer
-- successful `current/mdc --version`
-
-Stop conditions:
-
-- dirty repo
-- missing or lightweight tag
-- missing `gh` or `goreleaser`
-- GitHub release already exists
-- target server release directory already exists
-
-## Build SOP
-
-Goal:
-
-- keep code tasks clean, scoped, and reviewable
+- keep coding tasks clean, scoped, and reviewable
 
 Checklist:
 
@@ -71,39 +37,37 @@ Checklist:
 2. Run `scripts/mac/codex-bridge-dispatch.sh task ...` or `scripts/mac/codex-bridge-make-brief.sh ...`.
 3. If the route is `codex`, copy the generated brief into Codex App.
 4. Keep the implementation scoped to the stated goal and constraints.
-5. Run local tests, smoke checks, or relevant validation commands.
+5. Run local tests or smoke checks in the target repo.
 6. Review the patch before commit.
-
-MiddayCommander note:
-
-- build/test/commit work stays in the MiddayCommander repo
-- new deploy and health runbooks for that repo now live in `codex-bridge`
-
-Stop conditions:
-
-- if the task is actually an ops issue, switch to the incident flow
-- if the task includes risky production signals, stop and escalate
 
 ## Incident SOP
 
 Goal:
 
 - inspect the system safely
-- avoid destructive improvisation during pressure
+- avoid destructive improvisation under pressure
 
 Checklist:
 
-1. Run `scripts/mac/codex-bridge-triage-log.sh <service>`.
-2. Review the returned summary and recommended tool.
-3. If safe, run `scripts/mac/codex-bridge-auto.sh log ...` or dispatch a Gemini job through the push path.
-4. Review the executed commands and the final Markdown summary in `storage/gemini_runs/`.
-5. Review timing information if Gemini latency felt slow or ambiguous.
-6. Stop immediately if the route becomes `human` or the plan is blocked.
+1. Run `scripts/mac/codex-bridge-triage-log.sh <service>` or dispatch the problem statement.
+2. Review the summary and recommended route.
+3. If safe, run `scripts/mac/codex-bridge-auto.sh ...` or push a prepared Gemini job to the Mac.
+4. Review the executed commands, final Markdown, and timing output.
+5. Stop immediately if the route becomes `human` or the plan is blocked.
 
-What not to do:
+## Deployment Verification SOP
 
-- do not bypass the safe command layer with ad hoc destructive shell
-- do not treat production auth, firewall, or schema changes as routine auto-runs
+Goal:
+
+- confirm the router is healthy after deploy or upgrade
+
+Checklist:
+
+1. Verify `systemctl status codex-bridge.service`.
+2. Verify `GET /health`.
+3. Verify `GET /health?depth=full`.
+4. Check migration log entries for the run index.
+5. Run a small dispatch smoke test if behavior changed.
 
 ## End-of-Day SOP
 
@@ -117,12 +81,11 @@ Checklist:
 1. Collect completed work, open issues, and next actions.
 2. Run `scripts/mac/codex-bridge-daily-report.sh`.
 3. Save or share the Markdown report.
-4. Record any risky or blocked item that still needs human review.
-5. Confirm the next operator can tell what is done and what is still pending.
+4. Record any blocked or risky item that still needs human review.
 
 ## Artifact Review SOP
 
-When Gemini auto-run is involved, check these files under `storage/gemini_runs/`:
+When Gemini automation is involved, review these files under `storage/gemini_runs/`:
 
 - `<run_id>-job.json`
 - `<run_id>-gemini-output.json`
@@ -133,8 +96,8 @@ When Gemini auto-run is involved, check these files under `storage/gemini_runs/`
 
 Use them to answer:
 
-- what job the router generated
+- what the router generated
 - what Gemini actually returned
 - what commands were executed
 - whether the run timed out or was interrupted
-- how long the headless stage and total pipeline took
+- how long the model and execution stages took
