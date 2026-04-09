@@ -44,3 +44,14 @@ class ProfileValidationTestCase(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             payload = response.json()
             self.assertEqual(payload["route"], "human")
+
+    def test_hidden_appledouble_yaml_is_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            (temp_path / "codex-bridge.yaml").write_text(
+                "repo_name: codex-bridge\ndefault_safe_services:\n  - codex-bridge\n",
+                encoding="utf-8",
+            )
+            (temp_path / "._codex-bridge.yaml").write_bytes(b"\x00\xa3not-utf8-yaml")
+            profiles = load_profiles(temp_path)
+            self.assertIn("codex-bridge", profiles)

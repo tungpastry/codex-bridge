@@ -66,11 +66,13 @@ fi
 
 ssh "$MIDDAY_DESKTOP_SSH" "mkdir -p $desktop_root_q"
 
-tar -C "$MIDDAY_BRIDGE_MAC_ROOT" \
+COPYFILE_DISABLE=1 tar -C "$MIDDAY_BRIDGE_MAC_ROOT" \
   --exclude='.git' \
   --exclude='.venv' \
   --exclude='storage' \
   --exclude='.env' \
+  --exclude='._*' \
+  --exclude='.DS_Store' \
   --exclude='targets/*.env' \
   --exclude='__pycache__' \
   --exclude='.pytest_cache' \

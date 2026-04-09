@@ -12,6 +12,8 @@ def load_profiles(profiles_dir: Path) -> dict[str, ProfileDefinition]:
     if not profiles_dir.exists():
         return profiles
     for path in sorted(profiles_dir.glob("*.yaml")):
+        if path.name.startswith("."):
+            continue
         profile = ProfileDefinition.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
         profiles[profile.repo_name] = profile
     return profiles
