@@ -1,5 +1,9 @@
 # Codex Bridge
 
+<p align="center">
+  <img src="docs/assets/brand/codex-bridge-logo-light.png" alt="Codex Bridge logo" width="420">
+</p>
+
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116%2B-009688?logo=fastapi&logoColor=white)
 ![Gemini Auto Runner](https://img.shields.io/badge/Gemini-Headless%20Auto%20Runner-1A73E8)
@@ -145,6 +149,10 @@ curl -sS http://127.0.0.1:8787/health | jq .
 - [MiddayCommander integration](docs/targets/middaycommander.md)
 - [Tích hợp MiddayCommander](docs/targets/middaycommander-vi.md)
 
+### Brand Assets
+
+- [Brand asset pack](docs/assets/brand/README.md)
+
 ## Key Runtime Paths
 
 - Router service root on UbuntuDesktop: `/home/nexus/codex-bridge`
@@ -179,6 +187,7 @@ CODEX_BRIDGE_INTERNAL_API_TOKEN=change-me-in-prod
 - `preferred_command_hosts` can guide Gemini to pick the right host for service-oriented commands.
 - For the `codex-bridge` repo, the current profile prefers `UbuntuDesktop` for `systemctl` and `journalctl` commands.
 - The safe command catalog remains intentionally small and typed.
+- The README hero uses the light full-logo asset at `width="420"` to keep the header balanced on GitHub.
 
 ## License
 
