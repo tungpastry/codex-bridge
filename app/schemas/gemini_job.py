@@ -38,5 +38,6 @@ class GeminiJob(SchemaBase):
     constraints: List[str] = Field(default_factory=list)
     allowed_hosts: List[AllowedHost] = Field(default_factory=list)
     allowed_command_ids: List[str] = Field(default_factory=list)
+    preferred_command_hosts: Dict[str, AllowedHost] = Field(default_factory=dict)
     output_contract: GeminiJobOutputContract = Field(default_factory=GeminiJobOutputContract)
     prompt: str = ""

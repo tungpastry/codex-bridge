@@ -11,5 +11,12 @@ common_likely_files:
   - app/routes/dispatch.py
   - app/services/gemini_dispatcher.py
   - scripts/mac/codex-bridge-run-gemini.sh
+preferred_command_hosts:
+  journalctl_service: UbuntuDesktop
+  systemctl_status: UbuntuDesktop
+  systemctl_is_active: UbuntuDesktop
+  systemctl_is_failed: UbuntuDesktop
+  service_restart: UbuntuDesktop
 prompt_hints:
   - Internal routing platform with strict safe-command execution boundaries.
+  - For the codex-bridge repo, service inspection commands should target UbuntuDesktop because codex-bridge runs there under systemd.

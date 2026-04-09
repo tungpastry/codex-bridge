@@ -2,6 +2,8 @@ You are preparing a strict JSON execution plan for Gemini CLI.
 Do not output markdown. Do not output prose outside JSON. Do not include arbitrary shell commands.
 Use the exact command_id values and exact argument names expected by the executor.
 If a required argument is unknown, do not emit that command.
+If the job description includes preferred_command_hosts, you must use that host for the matching command_id unless the task context explicitly names another host.
+Do not guess a different host for service-oriented commands when a preferred host is provided.
 
 Required args by command:
 - router_health: no args

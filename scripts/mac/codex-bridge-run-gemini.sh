@@ -43,6 +43,31 @@ fi
 if [[ -z "${CODEX_BRIDGE_INTERNAL_API_TOKEN:-}" ]]; then
   CODEX_BRIDGE_INTERNAL_API_TOKEN="$(load_env_value CODEX_BRIDGE_INTERNAL_API_TOKEN || true)"
 fi
+if [[ -z "${CODEX_BRIDGE_BASE_URL:-}" ]]; then
+  CODEX_BRIDGE_BASE_URL="http://192.168.1.15:8787"
+fi
+
+load_auth_env_value() {
+  local key="$1"
+  local value=""
+
+  if [[ -n "${!key:-}" ]]; then
+    export "$key"
+    return 0
+  fi
+
+  value="$(load_env_value "$key" || true)"
+  if [[ -n "$value" ]]; then
+    printf -v "$key" '%s' "$value"
+    export "$key"
+  fi
+}
+
+load_auth_env_value GEMINI_API_KEY
+load_auth_env_value GOOGLE_API_KEY
+load_auth_env_value GOOGLE_CLOUD_PROJECT
+load_auth_env_value GOOGLE_CLOUD_LOCATION
+load_auth_env_value GOOGLE_APPLICATION_CREDENTIALS
 
 GEMINI_BIN="${CODEX_BRIDGE_GEMINI_BIN:-/opt/homebrew/bin/gemini}"
 RUNS_DIR="${CODEX_BRIDGE_MAC_ROOT:-$ROOT_DIR}/storage/gemini_runs"
@@ -67,6 +92,8 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 JOB_FILE="${TMP_DIR}/gemini-job.json"
 PROMPT_FILE="${TMP_DIR}/gemini-prompt.txt"
 RAW_OUTPUT_FILE="${TMP_DIR}/gemini-raw-output.json"
+STDERR_OUTPUT_FILE="${TMP_DIR}/gemini-stderr-output.txt"
+PARSED_OUTPUT_FILE="${TMP_DIR}/gemini-parsed-output.json"
 PLAN_OUTPUT_FILE="${TMP_DIR}/gemini-plan.json"
 EXEC_OUTPUT_FILE="${TMP_DIR}/gemini-exec-output.json"
 BASE_RESULT_FILE="${TMP_DIR}/gemini-base-result.json"
@@ -100,6 +127,7 @@ ACTIVE_CHILD_PID=""
 ACTIVE_PHASE=""
 FINAL_OUTPUT_EMITTED=0
 GEMINI_TIMEOUT_FLAG_FILE="${TMP_DIR}/gemini-timeout.flag"
+GEMINI_AUTH_REQUIRED_FLAG_FILE="${TMP_DIR}/gemini-auth-required.flag"
 
 cleanup_tmp_dir() {
   rm -rf "$TMP_DIR"
@@ -124,6 +152,46 @@ capture_time_vars() {
 
 format_duration_seconds() {
   "$PYTHON_BIN" -c 'import sys; print(f"{int(sys.argv[1]) / 1000:.1f}s")' "${1:-0}"
+}
+
+extract_json_payload() {
+  local input_file="$1"
+  local output_file="$2"
+
+  "$PYTHON_BIN" - "$input_file" "$output_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+input_path = Path(sys.argv[1])
+output_path = Path(sys.argv[2])
+raw_text = input_path.read_text(encoding="utf-8", errors="replace")
+
+def try_write(candidate: str) -> bool:
+    try:
+        obj = json.loads(candidate)
+    except json.JSONDecodeError:
+        return False
+    output_path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    return True
+
+stripped = raw_text.strip()
+if stripped and try_write(stripped):
+    raise SystemExit(0)
+
+decoder = json.JSONDecoder()
+for index, char in enumerate(raw_text):
+    if char not in "{[":
+        continue
+    try:
+        obj, _end = decoder.raw_decode(raw_text[index:])
+    except json.JSONDecodeError:
+        continue
+    output_path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    raise SystemExit(0)
+
+raise SystemExit(1)
+PY
 }
 
 build_timing_json() {
@@ -246,7 +314,7 @@ emit_final_output() {
       final_markdown: $final_markdown
     }' "$BASE_RESULT_FILE" | tee "$FINAL_OUTPUT_FILE"
 
-  if [[ -n "${CODEX_BRIDGE_BASE_URL:-}" && -n "${CODEX_BRIDGE_INTERNAL_API_TOKEN:-}" && -f "$FINAL_OUTPUT_FILE" ]]; then
+  if [[ -n "${CODEX_BRIDGE_INTERNAL_API_TOKEN:-}" && -f "$FINAL_OUTPUT_FILE" ]]; then
     "$PYTHON_BIN" -m app.execution.cli post-callback \
       --run-id "$RUN_ID" \
       --payload-file "$FINAL_OUTPUT_FILE" \
@@ -263,27 +331,99 @@ emit_final_output() {
 }
 
 run_gemini_cli() {
-  local prompt_text="$1"
+  local prompt_file="$1"
   local exit_code=0
-  local watchdog_pid=""
 
   rm -f "$GEMINI_TIMEOUT_FLAG_FILE"
+  rm -f "$GEMINI_AUTH_REQUIRED_FLAG_FILE"
   ACTIVE_PHASE="gemini_headless"
-  "$GEMINI_BIN" -p "$prompt_text" --output-format json >"$RAW_OUTPUT_FILE" 2>&1 &
-  ACTIVE_CHILD_PID="$!"
+  "$PYTHON_BIN" - "$GEMINI_BIN" "$prompt_file" "$RAW_OUTPUT_FILE" "$STDERR_OUTPUT_FILE" "$GEMINI_TIMEOUT_FLAG_FILE" "$GEMINI_AUTH_REQUIRED_FLAG_FILE" "$GEMINI_TIMEOUT_SECONDS" <<'PY' &
+from __future__ import annotations
 
-  if (( GEMINI_TIMEOUT_SECONDS > 0 )); then
-    (
-      sleep "$GEMINI_TIMEOUT_SECONDS"
-      if kill -0 "$ACTIVE_CHILD_PID" 2>/dev/null; then
-        : >"$GEMINI_TIMEOUT_FLAG_FILE"
-        kill -TERM "$ACTIVE_CHILD_PID" 2>/dev/null || true
-        sleep 2
-        kill -KILL "$ACTIVE_CHILD_PID" 2>/dev/null || true
-      fi
-    ) &
-    watchdog_pid="$!"
-  fi
+import os
+import re
+import selectors
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+gemini_bin = sys.argv[1]
+prompt_file = Path(sys.argv[2])
+stdout_file = Path(sys.argv[3])
+stderr_file = Path(sys.argv[4])
+timeout_flag_file = Path(sys.argv[5])
+auth_flag_file = Path(sys.argv[6])
+timeout_seconds = int(sys.argv[7])
+
+prompt_text = prompt_file.read_text(encoding="utf-8")
+pattern = re.compile(
+    r"Opening authentication page in your browser|How would you like to authenticate|Do you want to continue\? \[Y/n\]:",
+    re.IGNORECASE,
+)
+
+proc = subprocess.Popen(
+    [gemini_bin, "-p", prompt_text, "--output-format", "json"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+)
+
+selector = selectors.DefaultSelector()
+stdout_handle = proc.stdout
+stderr_handle = proc.stderr
+assert stdout_handle is not None
+assert stderr_handle is not None
+selector.register(stdout_handle, selectors.EVENT_READ, ("stdout", stdout_file))
+selector.register(stderr_handle, selectors.EVENT_READ, ("stderr", stderr_file))
+
+stdout_file.write_bytes(b"")
+stderr_file.write_bytes(b"")
+recent_chunks: list[str] = []
+start = time.monotonic()
+
+def mark_and_stop(flag_path: Path) -> None:
+    flag_path.write_text("", encoding="utf-8")
+    if proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+while selector.get_map():
+    if timeout_seconds > 0 and proc.poll() is None and (time.monotonic() - start) >= timeout_seconds:
+        mark_and_stop(timeout_flag_file)
+
+    events = selector.select(timeout=0.2)
+    if not events:
+        if proc.poll() is not None:
+            for key in list(selector.get_map().values()):
+                selector.unregister(key.fileobj)
+            break
+        continue
+
+    for key, _ in events:
+        stream_name, output_path = key.data
+        chunk = os.read(key.fd, 4096)
+        if not chunk:
+            selector.unregister(key.fileobj)
+            continue
+
+        with output_path.open("ab") as handle:
+            handle.write(chunk)
+
+        recent_chunks.append(chunk.decode("utf-8", errors="replace"))
+        if len(recent_chunks) > 8:
+            recent_chunks.pop(0)
+
+        if proc.poll() is None and pattern.search("".join(recent_chunks)):
+            mark_and_stop(auth_flag_file)
+
+return_code = proc.wait()
+raise SystemExit(return_code)
+PY
+  ACTIVE_CHILD_PID="$!"
 
   if wait "$ACTIVE_CHILD_PID"; then
     exit_code=0
@@ -293,12 +433,6 @@ run_gemini_cli() {
 
   ACTIVE_CHILD_PID=""
   ACTIVE_PHASE=""
-
-  if [[ -n "$watchdog_pid" ]]; then
-    kill "$watchdog_pid" >/dev/null 2>&1 || true
-    wait "$watchdog_pid" >/dev/null 2>&1 || true
-  fi
-
   return "$exit_code"
 }
 
@@ -410,6 +544,7 @@ cp "$JOB_FILE" "${RUNS_DIR}/${RUN_ID}-job.json"
 if [[ -n "${CODEX_BRIDGE_GEMINI_MOCK_RESPONSE_FILE:-}" ]]; then
   capture_time_vars gemini_started
   cp "${CODEX_BRIDGE_GEMINI_MOCK_RESPONSE_FILE}" "$RAW_OUTPUT_FILE"
+  : >"$STDERR_OUTPUT_FILE"
   capture_time_vars gemini_finished
 else
   if [[ ! -x "$GEMINI_BIN" ]]; then
@@ -422,13 +557,19 @@ else
   fi
 
   capture_time_vars gemini_started
-  if run_gemini_cli "$(cat "$PROMPT_FILE")"; then
+  if run_gemini_cli "$PROMPT_FILE"; then
     :
   else
     gemini_exit_code="$?"
     capture_time_vars gemini_finished
     cp "$RAW_OUTPUT_FILE" "${RUNS_DIR}/${RUN_ID}-gemini-output.json" 2>/dev/null || true
-    if [[ -f "$GEMINI_TIMEOUT_FLAG_FILE" ]]; then
+    if [[ -f "$GEMINI_AUTH_REQUIRED_FLAG_FILE" ]]; then
+      write_blocked_result_json \
+        "Gemini CLI requested interactive browser authentication. Headless mode on this runner requires cached credentials or environment-based authentication such as GEMINI_API_KEY or Vertex AI." \
+        "Gemini automation stopped because headless authentication is not configured." \
+        "low"
+      jq '. + {needs_human:true, phase:"final"}' "$BASE_RESULT_FILE" >"${BASE_RESULT_FILE}.tmp" && mv "${BASE_RESULT_FILE}.tmp" "$BASE_RESULT_FILE"
+    elif [[ -f "$GEMINI_TIMEOUT_FLAG_FILE" ]]; then
       write_blocked_result_json \
         "Gemini CLI timed out after ${GEMINI_TIMEOUT_SECONDS}s." \
         "Gemini automation stopped because headless execution exceeded the timeout." \
@@ -447,9 +588,24 @@ else
   capture_time_vars gemini_finished
 fi
 
-cp "$RAW_OUTPUT_FILE" "${RUNS_DIR}/${RUN_ID}-gemini-output.json"
+if [[ -f "$GEMINI_AUTH_REQUIRED_FLAG_FILE" ]]; then
+  cp "$RAW_OUTPUT_FILE" "${RUNS_DIR}/${RUN_ID}-gemini-output.json" 2>/dev/null || true
+  write_blocked_result_json \
+    "Gemini CLI requested interactive browser authentication. Headless mode on this runner requires cached credentials or environment-based authentication such as GEMINI_API_KEY or Vertex AI." \
+    "Gemini automation stopped because headless authentication is not configured." \
+    "low"
+  jq '. + {needs_human:true, phase:"final"}' "$BASE_RESULT_FILE" >"${BASE_RESULT_FILE}.tmp" && mv "${BASE_RESULT_FILE}.tmp" "$BASE_RESULT_FILE"
+  emit_final_output 1
+  exit $?
+fi
 
-if ! jq . "$RAW_OUTPUT_FILE" >/dev/null 2>&1; then
+if extract_json_payload "$RAW_OUTPUT_FILE" "$PARSED_OUTPUT_FILE"; then
+  cp "$PARSED_OUTPUT_FILE" "${RUNS_DIR}/${RUN_ID}-gemini-output.json"
+else
+  cp "$RAW_OUTPUT_FILE" "${RUNS_DIR}/${RUN_ID}-gemini-output.json"
+fi
+
+if ! [[ -s "$PARSED_OUTPUT_FILE" ]] || ! jq . "$PARSED_OUTPUT_FILE" >/dev/null 2>&1; then
   write_blocked_result_json \
     "Gemini did not return valid JSON." \
     "Gemini automation stopped because the model response was not parseable JSON." \
@@ -459,10 +615,10 @@ if ! jq . "$RAW_OUTPUT_FILE" >/dev/null 2>&1; then
   exit $?
 fi
 
-if jq -e '.response and (.response | type == "string")' "$RAW_OUTPUT_FILE" >/dev/null 2>&1; then
-  jq -r '.response' "$RAW_OUTPUT_FILE" >"$PLAN_OUTPUT_FILE"
+if jq -e '.response and (.response | type == "string")' "$PARSED_OUTPUT_FILE" >/dev/null 2>&1; then
+  jq -r '.response' "$PARSED_OUTPUT_FILE" >"$PLAN_OUTPUT_FILE"
 else
-  cp "$RAW_OUTPUT_FILE" "$PLAN_OUTPUT_FILE"
+  cp "$PARSED_OUTPUT_FILE" "$PLAN_OUTPUT_FILE"
 fi
 
 if ! jq . "$PLAN_OUTPUT_FILE" >/dev/null 2>&1; then

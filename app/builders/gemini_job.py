@@ -34,6 +34,7 @@ def build_gemini_job(
     )
     profile_name = profile.repo_name if profile else ""
     prompt_hints = profile.prompt_hints if profile else []
+    preferred_command_hosts = profile.preferred_command_hosts if profile else {}
     template = load_prompt(settings.prompts_dir, "build_gemini_job.txt")
     payload = {
         "run_id": run_id,
@@ -46,6 +47,7 @@ def build_gemini_job(
         "constraints": request.constraints,
         "allowed_hosts": ["local", "UbuntuDesktop", "UbuntuServer"],
         "allowed_command_ids": allowed_command_ids(),
+        "preferred_command_hosts": preferred_command_hosts,
         "prompt_hints": prompt_hints,
     }
     prompt = render_prompt(template, job_json=json.dumps(payload, ensure_ascii=False, indent=2))
@@ -60,6 +62,7 @@ def build_gemini_job(
         constraints=request.constraints,
         allowed_hosts=["local", "UbuntuDesktop", "UbuntuServer"],
         allowed_command_ids=allowed_command_ids(),
+        preferred_command_hosts=preferred_command_hosts,
         output_contract=GeminiJobOutputContract(),
         prompt=prompt,
     )

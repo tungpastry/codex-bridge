@@ -111,6 +111,27 @@ class RouterTestCase(unittest.TestCase):
             self.skipTest("dispatch route did not resolve to gemini in this environment")
         self.assertTrue(payload["gemini_job"]["job_id"])
 
+    def test_dispatch_codex_bridge_gemini_job_prefers_desktop_hosts(self) -> None:
+        response = self.client.post(
+            "/v1/dispatch/task",
+            json={
+                "title": "Inspect codex-bridge health",
+                "input_kind": "task",
+                "context": "Use systemctl and journalctl to inspect the codex-bridge service safely.",
+                "repo": "codex-bridge",
+                "source": "test",
+                "constraints": ["Safe commands only"],
+            },
+        )
+        payload = response.json()
+        if payload["route"] != "gemini":
+            self.skipTest("dispatch route did not resolve to gemini in this environment")
+        job = payload["gemini_job"]
+        self.assertEqual(job["preferred_command_hosts"]["journalctl_service"], "UbuntuDesktop")
+        self.assertEqual(job["preferred_command_hosts"]["systemctl_status"], "UbuntuDesktop")
+        self.assertIn("preferred_command_hosts", job["prompt"])
+        self.assertIn("UbuntuDesktop", job["prompt"])
+
     def test_report_daily_bilingual(self) -> None:
         response = self.client.post(
             "/v1/report/daily",
@@ -234,6 +255,86 @@ class RouterTestCase(unittest.TestCase):
             runs_dir = temp_root / "storage" / "gemini_runs"
             for suffix in ("job", "gemini-output", "plan", "exec-results", "timing", "final"):
                 self.assertTrue((runs_dir / f"{job_id}-{suffix}.json").exists())
+
+    @unittest.skipUnless(shutil.which("jq"), "jq is required for runner shell tests")
+    def test_runner_extracts_json_after_banner_lines(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            job_id = "test-gemini-job-banner"
+            job_file = temp_root / "job.json"
+            mock_file = temp_root / "mock-response.txt"
+            job_file.write_text(
+                json.dumps(
+                    {
+                        "job_id": job_id,
+                        "mode": "ops_auto",
+                        "title": "Inspect local uptime after banner output",
+                        "repo": "codex-bridge",
+                        "problem_summary": "Inspect local uptime after banner output",
+                        "context_digest": "Use a safe local uptime command.",
+                        "constraints": ["Safe commands only"],
+                        "allowed_hosts": ["local", "UbuntuDesktop", "UbuntuServer"],
+                        "allowed_command_ids": ["uptime"],
+                        "output_contract": {
+                            "summary": "Short human-readable summary",
+                            "confidence": "low|medium|high",
+                            "needs_human": "true|false",
+                            "why": "Why the plan is safe or why it needs escalation",
+                            "commands": "Array of {host, command_id, args, reason}",
+                            "final_markdown": "Operator-ready markdown summary",
+                        },
+                        "prompt": "Return JSON only.",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            mock_file.write_text(
+                'Loaded cached credentials.\n'
+                'Loaded cached credentials.\n'
+                + json.dumps(
+                    {
+                        "response": json.dumps(
+                            {
+                                "summary": "Inspecting local uptime.",
+                                "confidence": "high",
+                                "needs_human": False,
+                                "why": "This uses a safe local read-only command.",
+                                "commands": [
+                                    {
+                                        "host": "local",
+                                        "command_id": "uptime",
+                                        "args": {},
+                                        "reason": "Check local uptime.",
+                                    }
+                                ],
+                                "final_markdown": "### Mock Plan",
+                            }
+                        )
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            env = os.environ.copy()
+            env["CODEX_BRIDGE_MAC_ROOT"] = str(temp_root)
+            env["CODEX_BRIDGE_GEMINI_MOCK_RESPONSE_FILE"] = str(mock_file)
+            result = subprocess.run(
+                [str(ROOT / "scripts/mac/codex-bridge-run-gemini.sh"), "--job-file", str(job_file)],
+                cwd=str(ROOT),
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["status"], "ok")
+            self.assertEqual(payload["run_id"], job_id)
+
+            runs_dir = temp_root / "storage" / "gemini_runs"
+            gemini_output = json.loads((runs_dir / f"{job_id}-gemini-output.json").read_text(encoding="utf-8"))
+            self.assertIn("response", gemini_output)
 
     @unittest.skipUnless(shutil.which("jq"), "jq is required for runner shell tests")
     def test_runner_blocked_plan_keeps_timing(self) -> None:
@@ -371,6 +472,77 @@ class RouterTestCase(unittest.TestCase):
             self.assertGreaterEqual(payload["timing"]["gemini_cli_duration_ms"], 0)
             self.assertGreaterEqual(payload["timing"]["total_duration_ms"], payload["timing"]["gemini_cli_duration_ms"])
             self.assertIn("## Timing", payload["final_markdown"])
+
+            runs_dir = temp_root / "storage" / "gemini_runs"
+            self.assertTrue((runs_dir / f"{job_id}-timing.json").exists())
+            self.assertTrue((runs_dir / f"{job_id}-final.json").exists())
+
+    @unittest.skipUnless(shutil.which("jq"), "jq is required for runner shell tests")
+    def test_runner_auth_prompt_fails_fast(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            job_id = "test-gemini-job-auth"
+            job_file = temp_root / "job.json"
+            fake_gemini = temp_root / "fake-gemini.sh"
+            job_file.write_text(
+                json.dumps(
+                    {
+                        "job_id": job_id,
+                        "mode": "ops_auto",
+                        "title": "Auth prompt plan",
+                        "repo": "codex-bridge",
+                        "problem_summary": "This plan should stop on browser auth prompt.",
+                        "context_digest": "Auth prompt test.",
+                        "constraints": ["Safe commands only"],
+                        "allowed_hosts": ["local", "UbuntuDesktop", "UbuntuServer"],
+                        "allowed_command_ids": ["uptime"],
+                        "output_contract": {
+                            "summary": "Short human-readable summary",
+                            "confidence": "low|medium|high",
+                            "needs_human": "true|false",
+                            "why": "Why the plan is safe or why it needs escalation",
+                            "commands": "Array of {host, command_id, args, reason}",
+                            "final_markdown": "Operator-ready markdown summary",
+                        },
+                        "prompt": "Return JSON only.",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            fake_gemini.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys, time\n"
+                "print('Opening authentication page in your browser. Do you want to continue? [Y/n]:', flush=True)\n"
+                "time.sleep(30)\n",
+                encoding="utf-8",
+            )
+            fake_gemini.chmod(0o755)
+
+            env = os.environ.copy()
+            env["CODEX_BRIDGE_MAC_ROOT"] = str(temp_root)
+            env["CODEX_BRIDGE_GEMINI_BIN"] = str(fake_gemini)
+            env["CODEX_BRIDGE_GEMINI_TIMEOUT_SECONDS"] = "180"
+
+            started = time.time()
+            result = subprocess.run(
+                [str(ROOT / "scripts/mac/codex-bridge-run-gemini.sh"), "--job-file", str(job_file)],
+                cwd=str(ROOT),
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            elapsed = time.time() - started
+
+            self.assertNotEqual(result.returncode, 0, msg=result.stderr)
+            self.assertLess(elapsed, 10.0)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["status"], "blocked")
+            self.assertEqual(payload["run_id"], job_id)
+            self.assertEqual(payload["job_id"], job_id)
+            self.assertIn("interactive browser authentication", payload["why"])
+            self.assertTrue(payload["needs_human"])
+            self.assertGreaterEqual(payload["timing"]["gemini_cli_duration_ms"], 0)
 
             runs_dir = temp_root / "storage" / "gemini_runs"
             self.assertTrue((runs_dir / f"{job_id}-timing.json").exists())

@@ -55,3 +55,9 @@ class ProfileValidationTestCase(unittest.TestCase):
             (temp_path / "._codex-bridge.yaml").write_bytes(b"\x00\xa3not-utf8-yaml")
             profiles = load_profiles(temp_path)
             self.assertIn("codex-bridge", profiles)
+
+    def test_codex_bridge_profile_prefers_desktop_for_service_commands(self) -> None:
+        profiles = load_profiles(Path(__file__).resolve().parents[1] / "app" / "profiles")
+        profile = profiles["codex-bridge"]
+        self.assertEqual(profile.preferred_command_hosts["journalctl_service"], "UbuntuDesktop")
+        self.assertEqual(profile.preferred_command_hosts["systemctl_status"], "UbuntuDesktop")
