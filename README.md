@@ -1,8 +1,8 @@
 # Codex Bridge
 
-<p align="center">
+<div align="center">
   <img src="docs/assets/brand/codex-bridge-logo-light.png" alt="Codex Bridge logo" width="420">
-</p>
+</div>
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116%2B-009688?logo=fastapi&logoColor=white)
