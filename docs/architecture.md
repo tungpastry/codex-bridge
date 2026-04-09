@@ -1,89 +1,152 @@
 # Architecture
 
-## Overview
+## Tong quan
 
-`codex-bridge` is a lightweight routing layer between raw operator input and the tool that should actually handle the work. It does not try to become a job queue, a workflow engine, or a Codex App controller. The architecture is deliberately narrow:
+`codex-bridge` la mot internal routing platform nho gon cho workflow DevOps + coding. Sau ban nang cap Production Blueprint v1, he thong van giu nguyen triet ly ban dau:
 
-- preprocess raw input
-- classify risk and intent
-- choose the correct route
-- generate a safe artifact for that route
-- record enough output to make operations understandable later
+- routing uu tien heuristic
+- fail-closed safety
+- khong control UI cua Codex App
+- Gemini chi duoc di qua structured safe command boundary
+- moi run co artifact va co index de query lai
 
-## Three-Node Topology
+No khong co y bien thanh queue system, job orchestrator tong quat, hay full automation engine.
 
-| Node | Address | Role |
+## Topology 3 node
+
+| Node | Dia chi | Vai tro |
 | --- | --- | --- |
-| Mac mini | `192.168.1.7` | operator workstation, Codex App host, Gemini CLI runner |
-| UbuntuDesktop | `192.168.1.15` | FastAPI router, local LLM worker, prompt store |
-| UbuntuServer | `192.168.1.30` | application runtime, PostgreSQL, cron, systemd, logs |
+| Mac mini | `192.168.1.7` | workstation, Codex App host, Gemini CLI runner |
+| UbuntuDesktop | `192.168.1.15` | FastAPI router, prompt store, run index owner |
+| UbuntuServer | `192.168.1.30` | runtime node, postgres, systemd services, logs |
 
-Responsibilities by node:
-
-- Mac mini owns interactive coding and automated Gemini CLI headless runs.
-- UbuntuDesktop owns classification, prompt loading, report generation, and route orchestration.
-- UbuntuServer owns the services and logs that usually need inspection during incident response.
-
-## Data Flow
+## Luong chinh
 
 ```mermaid
 flowchart LR
-    A["Raw task, diff, log, or report"] --> B["codex-bridge router on UbuntuDesktop"]
-    B --> C["Heuristics + optional Ollama refinement"]
-    C --> D{"Route"}
-    D -->|codex| E["Markdown brief for Codex App"]
-    D -->|gemini| F["Structured Gemini job"]
-    D -->|human| G["Blocked response with escalation reason"]
-    D -->|local| H["Immediate local JSON or Markdown"]
-    F --> I["Gemini CLI headless on Mac mini"]
-    I --> J["Structured plan JSON with command IDs"]
-    J --> K["codex-bridge-exec-safe.sh"]
-    K --> L["Safe commands on Mac, UbuntuDesktop, or UbuntuServer"]
+    A["Raw task / diff / log / report"] --> B["codex-bridge router on UbuntuDesktop"]
+    B --> C["Heuristic policy modules"]
+    C --> D["Decision trace + route"]
+    D -->|codex| E["Codex brief artifact"]
+    D -->|gemini| F["Gemini job artifact"]
+    D -->|human| G["Blocked response"]
+    D -->|local| H["Local summary/report"]
+    B --> I["SQLite run index"]
+    F --> J["Mac mini Gemini runner"]
+    J --> K["Typed execution plan"]
+    K --> L["Safe execution validator"]
+    L --> M["Local or SSH adapters"]
+    M --> N["Execution callback to router"]
+    N --> I
 ```
 
-## Why Preprocess Before Codex or Gemini
+## Package structure sau nang cap
 
-Without a router, every task arrives as a noisy blob. `codex-bridge` exists to make that blob usable:
+He thong duoc tach thanh cac package nho, cohesive, de review va maintain de hon:
 
-- raw context is normalized before it is pasted into Codex App
-- risky signals are detected before Gemini sees them as possible automation candidates
-- logs and diffs are summarized into short, operator-friendly JSON
-- the system can distinguish between “needs code changes” and “needs safe shell inspection”
+- `app/api/routes`
+- `app/core`
+- `app/policy`
+- `app/builders`
+- `app/execution`
+- `app/artifacts`
+- `app/index`
+- `app/profiles`
+- `app/services`
+- `app/schemas`
 
-This is especially important because Codex App does not automatically use the local model node. If local-model preprocessing happens, it happens because this custom router exists.
+Import cu duoc giu qua thin wrappers trong `app/routes/*` de tranh lam gay flow hien tai.
 
-## Coding Path
+## Policy layer
 
-The coding path is intentionally manual:
+Decision logic da duoc tach ra khoi service wrappers:
 
-1. collect issue context, diff, or bug summary
-2. call `/v1/brief/codex` or `/v1/dispatch/task`
-3. receive `codex_brief_markdown`
-4. paste the brief into Codex App
-5. implement and review manually in the editor or Codex App
+- `task_policy.py`
+- `log_policy.py`
+- `diff_policy.py`
+- `risk_policy.py`
+- `route_engine.py`
+- `decision_trace.py`
 
-Why this remains manual:
+Moi response classify/log/diff/dispatch deu co `decision_trace` gom:
 
-- no UI automation
-- no AppleScript
-- no browser automation
-- no hidden control of Codex App
+- `matched_rules[]`
+- `confidence`
 
-## Gemini Automation Path
+Dieu nay giup operator biet vi sao he thong route sang `codex`, `gemini`, `human`, hoac `local`.
 
-The Gemini path is automated, but only inside a strict safety boundary:
+## Run index layer
 
-1. router builds a `gemini_job`
-2. Mac mini runs `codex-bridge-run-gemini.sh`
-3. Gemini CLI headless returns JSON, not free-form shell
-4. the JSON contains `commands[]` with `host`, `command_id`, `args`, and `reason`
-5. `codex-bridge-exec-safe.sh` validates every command against the whitelist
-6. approved commands run locally or over SSH
-7. invalid or risky plans fail closed
+SQLite run index la nguon query chinh cho observability tren router host.
 
-The command catalog is intentionally small in v1. It supports safe inspection and limited restarts for allowlisted services.
+Bang du lieu:
 
-## Command Safety Model
+- `runs`
+- `run_commands`
+- `run_rules`
+- `artifacts`
+
+Migrations:
+
+- `001_init.sql`
+- `002_indexes.sql`
+
+Startup se tu apply migration va ghi log migration bat buoc:
+
+- `db_path`
+- `current_user_version`
+- `applied_migrations`
+- `final_user_version`
+
+Chi tiet artifact van nam o `storage/`; SQLite la lop index va query, khong thay the audit trail tren filesystem.
+
+## Dispatch lifecycle
+
+`/v1/dispatch/task` hien nay:
+
+1. tao `run_id`
+2. persist `request_snapshot`
+3. chay policy va route
+4. persist `run_rules`
+5. tao artifact phu hop
+6. persist `response_snapshot`
+7. cap nhat status cua run
+
+Run status hien tai:
+
+- `created`
+- `completed`
+- `blocked`
+- `awaiting_execution`
+- `failed`
+- `timeout`
+- `interrupted`
+
+## Execution model
+
+Gemini khong duoc tra shell text tu do. No chi duoc tra plan co typed commands:
+
+- `host`
+- `command_id`
+- `args`
+- `reason`
+
+Execution core duoc tach thanh:
+
+- `validator.py`
+- `result_normalizer.py`
+- `redaction.py`
+- `adapters/local.py`
+- `adapters/ssh.py`
+
+Mac runner van duoc giu lai:
+
+- `scripts/mac/codex-bridge-run-gemini.sh`
+- `scripts/mac/codex-bridge-exec-safe.sh`
+
+nhung phan validate/normalize da day xuong Python core.
+
+## Safety boundary
 
 Allowed hosts:
 
@@ -91,8 +154,10 @@ Allowed hosts:
 - `UbuntuDesktop`
 - `UbuntuServer`
 
-Example allowed command IDs:
+Allowed command IDs v1:
 
+- `router_health`
+- `http_health`
 - `journalctl_service`
 - `systemctl_status`
 - `systemctl_is_active`
@@ -107,30 +172,55 @@ Example allowed command IDs:
 - `git_diff_main_head`
 - `git_log_recent`
 
-Blocked patterns include:
+Fail-closed rules van giu nguyen:
 
-- destructive shell tokens
-- arbitrary `sudo`
-- `git push`
-- `git reset`
-- `docker`
-- `kubectl`
-- `psql`
-- production auth, firewall, or secret rotation requests
+- khong arbitrary shell tu Gemini
+- khong `sudo`
+- khong destructive shell
+- restart chi cho service trong allowlist
+- risky production/auth/firewall/secret flow van route `human`
 
-## Timing Transparency
+## Execution callback
 
-Gemini runs are now observable instead of opaque. The Mac runner records:
+Mac runner cap nhat ket qua ve router qua:
 
-- `run_id`
-- `job_id`
-- raw Gemini output
-- extracted plan JSON
-- execution results
-- timing metadata
-- final merged output
+- `POST /v1/internal/runs/{run_id}/execution`
 
-Each run uses a single stable artifact family:
+Callback:
+
+- bat buoc co token
+- bat buoc co `phase`
+- idempotent theo `run_id + phase`
+- khong duoc nhan doi `run_commands`
+
+`run_commands` duoc upsert theo identity `(run_id, ordinal)`.
+
+## Profiles
+
+Profiles YAML duoc giu toi gian, chi de lam hint:
+
+- `repo_name`
+- `default_safe_services`
+- `common_repo_paths`
+- `common_likely_files`
+- `prompt_hints`
+
+Profiles khong duoc phep lam yeu fail-closed safety.
+
+Hai profile mau ban dau:
+
+- `codex-bridge.yaml`
+- `middaycommander.yaml`
+
+## Timing va observability
+
+Gemini run tren Mac mini duoc ghi timing ro rang:
+
+- `gemini_cli_duration_ms`
+- `exec_duration_ms`
+- `total_duration_ms`
+
+Artifact family dung chung mot `run_id`:
 
 - `<run_id>-job.json`
 - `<run_id>-gemini-output.json`
@@ -139,21 +229,20 @@ Each run uses a single stable artifact family:
 - `<run_id>-timing.json`
 - `<run_id>-final.json`
 
-This makes it easier to answer:
+Dieu nay giup phan biet do tre nam o:
 
-- did Gemini itself take too long
-- was the delay in safe command execution
-- did the run die before producing a valid plan
-- did a timeout or `TERM` happen during headless execution
+- model headless
+- safe command execution
+- timeout/interrupted
+- hay parse/validation failure
 
-## Why V1 Avoids YOLO Tool Autonomy
+## Tai sao van giu Codex App manual
 
-V1 intentionally does not allow Gemini to execute arbitrary shell text directly.
+Ban nang cap nay khong doi huong san pham:
 
-Reasons:
+- khong UI automation
+- khong AppleScript
+- khong browser automation
+- khong direct control Codex App
 
-- approval prompts can stall unattended workflows
-- free-form shell is harder to validate deterministically
-- command IDs are easier to audit than unbounded shell strings
-- fail-closed behavior is more realistic for production operations
-- structured output is easier to test than prompt-driven shell improvisation
+`codex-bridge` chi sinh brief de operator paste vao Codex App.

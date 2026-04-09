@@ -4,7 +4,9 @@ from typing import Literal, Optional, List
 
 from pydantic import Field
 
+from app.schemas.artifact import DispatchArtifactsBlock
 from app.schemas.common import SchemaBase
+from app.schemas.decision_trace import DecisionTrace
 from app.schemas.gemini_job import GeminiJob
 
 
@@ -23,6 +25,7 @@ class DispatchTaskRequest(SchemaBase):
 
 
 class DispatchTaskResponse(SchemaBase):
+    run_id: str = ""
     route: RouteTarget
     task_type: str
     severity: str
@@ -33,3 +36,5 @@ class DispatchTaskResponse(SchemaBase):
     human_summary: Optional[str] = None
     block_reason: Optional[str] = None
     local_summary: Optional[str] = None
+    decision_trace: DecisionTrace = Field(default_factory=DecisionTrace)
+    artifacts: Optional[DispatchArtifactsBlock] = None

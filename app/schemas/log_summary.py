@@ -5,6 +5,7 @@ from typing import List, Literal
 from pydantic import Field
 
 from app.schemas.common import SchemaBase
+from app.schemas.decision_trace import DecisionTrace
 
 
 RecommendedTool = Literal["local", "gemini", "codex", "human"]
@@ -27,3 +28,4 @@ class LogSummaryResponse(SchemaBase):
     needs_codex: bool = False
     recommended_tool: RecommendedTool
     next_step: str
+    decision_trace: DecisionTrace = Field(default_factory=DecisionTrace)

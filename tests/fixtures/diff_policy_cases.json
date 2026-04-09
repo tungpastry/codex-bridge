@@ -1,0 +1,34 @@
+[
+  {
+    "name": "code_diff_routes_to_codex",
+    "request": {
+      "repo": "MiddayCommander",
+      "diff_text": "diff --git a/internal/fs/router.go b/internal/fs/router.go\n+++ b/internal/fs/router.go\n@@\n+if err != nil { return err }\n"
+    },
+    "expected": {
+      "recommended_tool": "codex"
+    }
+  },
+  {
+    "name": "migration_diff_routes_to_human",
+    "request": {
+      "repo": "codex-bridge",
+      "diff_text": "diff --git a/migrations/001_init.sql b/migrations/001_init.sql\n+++ b/migrations/001_init.sql\n@@\n+ALTER TABLE users ADD COLUMN token text;\n"
+    },
+    "expected": {
+      "recommended_tool": "human",
+      "risk_level": "high"
+    }
+  },
+  {
+    "name": "config_diff_routes_to_gemini",
+    "request": {
+      "repo": "codex-bridge",
+      "diff_text": "diff --git a/deploy/settings.yaml b/deploy/settings.yaml\n+++ b/deploy/settings.yaml\n@@\n+memory_limit: 512Mi\n"
+    },
+    "expected": {
+      "recommended_tool": "gemini",
+      "risk_level": "medium"
+    }
+  }
+]

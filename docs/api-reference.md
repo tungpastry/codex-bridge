@@ -1,20 +1,17 @@
 # API Reference
 
-This document describes the public FastAPI endpoints exposed by `codex-bridge`.
+Tai lieu nay mo ta cac endpoint quan trong cua `codex-bridge` sau khi nang cap theo Production Upgrade Blueprint v1.
 
-Base URL examples:
+Base URL thuong gap:
 
-- local Mac development: `http://127.0.0.1:8787`
-- UbuntuDesktop on LAN: `http://192.168.1.15:8787`
+- local Mac: `http://127.0.0.1:8787`
+- router tren UbuntuDesktop: `http://192.168.1.15:8787`
 
 ## GET /health
 
-Purpose:
+Health check co ban, giu backward-compatible.
 
-- confirm the service is reachable
-- expose the configured product identity and model settings
-
-Example response:
+Example:
 
 ```json
 {
@@ -22,230 +19,315 @@ Example response:
   "service": "codex-bridge",
   "llm_backend": "ollama",
   "model": "gemma3:1b-it-qat",
-  "time": "2026-04-08T06:19:11Z"
+  "time": "2026-04-09T01:00:00Z"
+}
+```
+
+## GET /health?depth=full
+
+Tra them thong tin local diagnostics cua router:
+
+- thong tin run index
+- migration version hien tai
+- storage root
+- profile da load
+- allowed hosts va so command duoc phep
+
+Example:
+
+```json
+{
+  "status": "ok",
+  "service": "codex-bridge",
+  "llm_backend": "ollama",
+  "model": "gemma3:1b-it-qat",
+  "time": "2026-04-09T01:00:00Z",
+  "depth": "full",
+  "index": {
+    "status": "ok",
+    "db_path": "/home/nexus/codex-bridge/storage/index/runs.db",
+    "user_version": 2
+  },
+  "storage_dir": "/home/nexus/codex-bridge/storage",
+  "profiles": {
+    "count": 2,
+    "names": ["MiddayCommander", "codex-bridge"]
+  },
+  "execution": {
+    "allowed_hosts": ["local", "UbuntuDesktop", "UbuntuServer"],
+    "allowed_command_count": 15
+  }
 }
 ```
 
 ## POST /v1/classify/task
 
-Purpose:
+Phan loai task dua tren heuristic va tra them `decision_trace`.
 
-- classify a task from raw title and context
-- choose `local`, `gemini`, `codex`, or `human`
+Request:
 
-Request fields:
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `title` | string | yes | short task title |
-| `context` | string | yes | raw context in Vietnamese or English |
-| `repo` | string | no | repo name, often `MiddayCommander` |
-| `source` | string | no | default `manual` |
-| `constraints` | string[] | no | implementation or operator constraints |
+```json
+{
+  "title": "MiddayCommander loi build",
+  "context": "Go test that bai voi panic trong transfer queue.",
+  "repo": "MiddayCommander",
+  "source": "manual",
+  "constraints": ["Patch nho"]
+}
+```
 
 Response fields:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `task_type` | string | `bugfix`, `ops`, `setup`, `review`, `deploy`, `research`, `feature`, or `unknown` |
-| `severity` | string | `low`, `medium`, `high`, or `critical` |
-| `repo` | string | echoed repo |
-| `problem_summary` | string | short summary |
-| `signals` | string[] | detected task signals |
-| `suspected_files` | string[] | file-like hints extracted from context |
-| `recommended_tool` | string | `local`, `gemini`, `codex`, or `human` |
-| `next_step` | string | practical next action |
+- `task_type`
+- `severity`
+- `repo`
+- `problem_summary`
+- `signals`
+- `suspected_files`
+- `recommended_tool`
+- `next_step`
+- `decision_trace`
 
 ## POST /v1/summarize/log
 
-Purpose:
-
-- summarize a log excerpt into a short operator triage packet
-
-Request fields:
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `service` | string | no | service name |
-| `log_text` | string | yes | raw log block |
-| `repo` | string | no | related repo |
-| `context` | string | no | extra operator notes |
-| `source` | string | no | default `manual` |
-| `host` | string | no | optional host label |
+Tom tat log, tra ve symptom, likely cause, recommended commands, va `decision_trace`.
 
 Response fields:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `symptom` | string | short symptom summary |
-| `likely_cause` | string | likely cause |
-| `important_lines` | string[] | high-signal log lines |
-| `recommended_commands` | string[] | suggested inspection commands |
-| `needs_codex` | boolean | true if the issue likely needs code changes |
-| `recommended_tool` | string | `local`, `gemini`, `codex`, or `human` |
-| `next_step` | string | practical next action |
+- `symptom`
+- `likely_cause`
+- `important_lines`
+- `recommended_commands`
+- `needs_codex`
+- `recommended_tool`
+- `next_step`
+- `decision_trace`
 
 ## POST /v1/summarize/diff
 
-Purpose:
-
-- summarize a diff and assess lightweight risk
-
-Request fields:
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `repo` | string | yes | repo name |
-| `diff_text` | string | yes | diff contents |
-| `base_ref` | string | no | default `main` |
-| `head_ref` | string | no | default `HEAD` |
-| `context` | string | no | optional notes |
+Tom tat diff va danh gia risk level.
 
 Response fields:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `summary` | string | diff summary |
-| `risk_level` | string | `low`, `medium`, or `high` |
-| `risk_flags` | string[] | config, auth, database, migration, security hints |
-| `review_focus` | string[] | key review bullets |
-| `recommended_tool` | string | `local`, `gemini`, `codex`, or `human` |
-| `next_step` | string | practical next action |
+- `summary`
+- `risk_level`
+- `risk_flags`
+- `review_focus`
+- `recommended_tool`
+- `next_step`
+- `decision_trace`
 
 ## POST /v1/compress/context
 
-Purpose:
-
-- compress raw task context into a paste-friendly implementation brief
-
-Request fields:
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `title` | string | yes | task title |
-| `context` | string | yes | raw input text |
-| `repo` | string | no | repo name |
-| `constraints` | string[] | no | constraints to preserve |
-| `target_tool` | string | no | optional hint |
+Nen context thanh brief ngan gon de paste.
 
 Response fields:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `compressed_context` | string | short implementation brief |
-| `key_points` | string[] | extracted high-signal points |
-| `constraints` | string[] | preserved constraints |
+- `compressed_context`
+- `key_points`
+- `constraints`
 
 ## POST /v1/brief/codex
 
-Purpose:
-
-- produce a Markdown brief for manual paste into Codex App
-
-Request fields:
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `title` | string | yes | task title |
-| `repo` | string | yes | target repo |
-| `context` | string | yes | cleaned task context |
-| `constraints` | string[] | no | constraints |
-| `acceptance_criteria` | string[] | no | acceptance criteria |
-| `likely_files` | string[] | no | likely touched files |
-| `notes` | string[] | no | extra notes |
-| `task_type` | string | no | optional override |
-| `goal` | string | no | optional goal |
+Sinh Markdown brief de paste thu cong vao Codex App.
 
 Response fields:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `brief_markdown` | string | final Markdown brief |
-| `task_type` | string | inferred or provided task type |
-| `recommended_tool` | string | always `codex` |
+- `brief_markdown`
+- `task_type`
+- `recommended_tool`
 
 ## POST /v1/report/daily
 
-Purpose:
-
-- turn free-form progress notes into a short daily report
-
-Request fields:
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `repo` | string | no | optional repo |
-| `items` | string[] | no | list of pre-split notes |
-| `raw_text` | string | no | free-form text |
-| `context` | string | no | extra notes |
-| `source` | string | no | default `manual` |
+Chuyen ghi chu thanh bao cao ngan.
 
 Response fields:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `markdown` | string | final Markdown report |
-| `done` | string[] | completed items |
-| `open_issues` | string[] | unresolved issues |
-| `next_actions` | string[] | next actions |
+- `markdown`
+- `done`
+- `open_issues`
+- `next_actions`
 
 ## POST /v1/dispatch/task
 
-Purpose:
+Day la endpoint orchestration chinh.
 
-- combine classification, route selection, and artifact building into one canonical response
+No:
 
-Request fields:
+- phan loai task
+- tao `run_id`
+- luu request/response snapshots
+- persist matched rules vao run index
+- tao artifact phu hop cho route duoc chon
 
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `title` | string | yes | task title |
-| `input_kind` | string | yes | `task`, `log`, `diff`, or `report` |
-| `context` | string | yes | raw input |
-| `repo` | string | no | repo name |
-| `source` | string | no | default `manual` |
-| `constraints` | string[] | no | route constraints |
-| `target_host` | string | no | service or host hint, commonly used with logs |
+Request:
+
+```json
+{
+  "title": "Inspect codex-bridge health",
+  "input_kind": "task",
+  "context": "Check service status and router health only with safe commands",
+  "repo": "codex-bridge",
+  "source": "manual",
+  "constraints": ["Safe commands only"]
+}
+```
 
 Response fields:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `route` | string | `codex`, `gemini`, `human`, or `local` |
-| `task_type` | string | inferred route type |
-| `severity` | string | `low`, `medium`, `high`, or `critical` |
-| `problem_summary` | string | short summary |
-| `next_step` | string | practical next action |
-| `codex_brief_markdown` | string or null | present for `codex` route |
-| `gemini_job` | object or null | present for `gemini` route |
-| `human_summary` | string or null | present for `human` route |
-| `block_reason` | string or null | present for `human` route |
-| `local_summary` | string or null | present for `local` route |
+- `run_id`
+- `route`
+- `task_type`
+- `severity`
+- `problem_summary`
+- `next_step`
+- `codex_brief_markdown`
+- `gemini_job`
+- `human_summary`
+- `block_reason`
+- `local_summary`
+- `decision_trace`
+- `artifacts`
 
-### Gemini Job Shape
+`artifacts.generated` chi tra metadata, khong tra noi dung file.
 
-When `route=gemini`, the response includes a `gemini_job` with:
+Artifact taxonomy da chot trong v1:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `mode` | string | always `ops_auto` |
-| `job_id` | string | stable job identity used by the runner |
-| `title` | string | task title |
-| `repo` | string | repo name |
-| `problem_summary` | string | short summary |
-| `context_digest` | string | cleaned context for Gemini |
-| `constraints` | string[] | preserved constraints |
-| `allowed_hosts` | string[] | `local`, `UbuntuDesktop`, `UbuntuServer` |
-| `allowed_command_ids` | string[] | command whitelist |
-| `output_contract` | object | required Gemini JSON contract |
-| `prompt` | string | rendered prompt text |
+- `request_snapshot`
+- `response_snapshot`
+- `codex_brief`
+- `daily_report`
+- `gemini_job`
+- `execution_plan`
+- `execution_result`
+- `timing`
+- `final_result`
 
-## Persistence Behavior
+## GET /v1/runs
 
-Each endpoint saves request and response snapshots under `storage/requests/` and `storage/responses/`.
+Liet ke run da persist trong SQLite index.
 
-Extra persistence:
+Query params:
 
-- `/v1/brief/codex` saves Markdown into `storage/reports/`
-- `/v1/report/daily` saves Markdown into `storage/reports/`
-- Gemini auto-runs save artifacts under `storage/gemini_runs/`
+- `repo`
+- `route`
+- `status`
+- `date` theo UTC dang `YYYY-MM-DD`
+- `limit`
+- `offset`
+
+Sort mac dinh:
+
+- `created_at DESC`
+
+Response:
+
+```json
+{
+  "items": [],
+  "total": 0,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+Moi item la run summary co cac field high-signal nhu:
+
+- `run_id`
+- `created_at`
+- `finished_at`
+- `status`
+- `route`
+- `input_kind`
+- `repo`
+- `profile_name`
+- `title`
+- `task_type`
+- `severity`
+- `blocked_flag`
+- `timeout_flag`
+- `interrupted_flag`
+- `needs_human_flag`
+- `timing_total_ms`
+- `command_count`
+
+## GET /v1/runs/{run_id}
+
+Tra chi tiet mot run:
+
+- `run`
+- `rules`
+- `commands`
+- `artifacts`
+
+`commands` da duoc normalize theo typed execution model:
+
+- `host`
+- `command_id`
+- `status`
+- `exit_code`
+- `duration_ms`
+- `stdout_excerpt`
+- `stderr_excerpt`
+- `truncated_flag`
+
+## GET /v1/runs/{run_id}/artifacts
+
+Tra danh sach artifact metadata cua mot run.
+
+Response:
+
+```json
+{
+  "run_id": "run-123",
+  "items": []
+}
+```
+
+## GET /v1/admin/metrics
+
+Tra metric tong hop tu SQLite run index.
+
+Response:
+
+```json
+{
+  "runs_total": 12,
+  "runs_today": 4,
+  "blocked_today": 1,
+  "timeouts_today": 0,
+  "route_distribution": {
+    "codex": 3,
+    "gemini": 6,
+    "human": 2,
+    "local": 1
+  },
+  "average_timing_ms": {
+    "total": 1840,
+    "model": 1030,
+    "exec": 520
+  }
+}
+```
+
+## POST /v1/internal/runs/{run_id}/execution
+
+Day la callback noi bo de Mac Gemini runner cap nhat lai run index tren router.
+
+Yeu cau:
+
+- header `X-Codex-Bridge-Token`
+- body phai co `phase`
+- duoc thiet ke idempotent theo `run_id + phase`
+
+Callback co the cap nhat:
+
+- `status`
+- `timeout_flag`
+- `interrupted_flag`
+- `needs_human`
+- `timing`
+- `results`
+- `artifacts`
+
+Endpoint nay khong danh cho client cong khai.

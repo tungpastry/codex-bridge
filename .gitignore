@@ -12,9 +12,11 @@ storage/responses/*
 storage/reports/*
 storage/releases/*
 storage/gemini_runs/*
+storage/index/*
 !storage/cache/.gitkeep
 !storage/requests/.gitkeep
 !storage/responses/.gitkeep
 !storage/reports/.gitkeep
 !storage/releases/.gitkeep
 !storage/gemini_runs/.gitkeep
+!storage/index/.gitkeep

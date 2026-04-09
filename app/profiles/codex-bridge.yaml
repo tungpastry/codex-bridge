@@ -1,0 +1,15 @@
+repo_name: codex-bridge
+default_safe_services:
+  - codex-bridge
+  - postgresql
+  - nginx
+common_repo_paths:
+  - app/
+  - scripts/mac/
+  - docs/
+common_likely_files:
+  - app/routes/dispatch.py
+  - app/services/gemini_dispatcher.py
+  - scripts/mac/codex-bridge-run-gemini.sh
+prompt_hints:
+  - Internal routing platform with strict safe-command execution boundaries.

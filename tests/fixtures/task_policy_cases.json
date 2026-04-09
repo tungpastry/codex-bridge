@@ -1,0 +1,45 @@
+[
+  {
+    "name": "vietnamese_bugfix_routes_to_codex",
+    "request": {
+      "title": "MiddayCommander loi build",
+      "context": "Go test that bai voi panic trong transfer queue.",
+      "repo": "MiddayCommander",
+      "source": "fixture",
+      "constraints": ["Patch nho"]
+    },
+    "expected": {
+      "task_type": "bugfix",
+      "recommended_tool": "codex",
+      "severity": "high"
+    }
+  },
+  {
+    "name": "english_ops_routes_to_gemini",
+    "request": {
+      "title": "Inspect service restart loop",
+      "context": "Use journalctl and systemctl to inspect the service and deploy state.",
+      "repo": "codex-bridge",
+      "source": "fixture",
+      "constraints": []
+    },
+    "expected": {
+      "task_type": "deploy",
+      "recommended_tool": "gemini"
+    }
+  },
+  {
+    "name": "risky_task_fails_closed",
+    "request": {
+      "title": "Production auth and schema change",
+      "context": "Need schema migration in production, rotate secret, and auth change.",
+      "repo": "codex-bridge",
+      "source": "fixture",
+      "constraints": []
+    },
+    "expected": {
+      "recommended_tool": "human",
+      "severity": "critical"
+    }
+  }
+]

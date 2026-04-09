@@ -3,6 +3,13 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_FILE="${ROOT_DIR}/.env"
+PYTHON_BIN="${ROOT_DIR}/.venv/bin/python"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="${ROOT_DIR}/.venv/bin/python3"
+fi
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="$(command -v python3)"
+fi
 
 load_env_value() {
   local key="$1"
@@ -29,6 +36,12 @@ load_env_value() {
 
 if [[ -z "${CODEX_BRIDGE_GEMINI_TIMEOUT_SECONDS:-}" ]]; then
   CODEX_BRIDGE_GEMINI_TIMEOUT_SECONDS="$(load_env_value CODEX_BRIDGE_GEMINI_TIMEOUT_SECONDS || true)"
+fi
+if [[ -z "${CODEX_BRIDGE_BASE_URL:-}" ]]; then
+  CODEX_BRIDGE_BASE_URL="$(load_env_value CODEX_BRIDGE_BASE_URL || true)"
+fi
+if [[ -z "${CODEX_BRIDGE_INTERNAL_API_TOKEN:-}" ]]; then
+  CODEX_BRIDGE_INTERNAL_API_TOKEN="$(load_env_value CODEX_BRIDGE_INTERNAL_API_TOKEN || true)"
 fi
 
 GEMINI_BIN="${CODEX_BRIDGE_GEMINI_BIN:-/opt/homebrew/bin/gemini}"
@@ -101,7 +114,7 @@ capture_time_vars() {
   local captured_stamp=""
 
   IFS=' ' read -r captured_at captured_ms captured_stamp < <(
-    python3 -c 'from datetime import datetime, timezone; now = datetime.now(timezone.utc); print(now.strftime("%Y-%m-%dT%H:%M:%SZ"), int(now.timestamp() * 1000), now.strftime("%Y%m%dT%H%M%SZ"))'
+    "$PYTHON_BIN" -c 'from datetime import datetime, timezone; now = datetime.now(timezone.utc); print(now.strftime("%Y-%m-%dT%H:%M:%SZ"), int(now.timestamp() * 1000), now.strftime("%Y%m%dT%H%M%SZ"))'
   )
 
   printf -v "${prefix}_at" '%s' "$captured_at"
@@ -110,7 +123,7 @@ capture_time_vars() {
 }
 
 format_duration_seconds() {
-  python3 -c 'import sys; print(f"{int(sys.argv[1]) / 1000:.1f}s")' "${1:-0}"
+  "$PYTHON_BIN" -c 'import sys; print(f"{int(sys.argv[1]) / 1000:.1f}s")' "${1:-0}"
 }
 
 build_timing_json() {
@@ -233,6 +246,19 @@ emit_final_output() {
       final_markdown: $final_markdown
     }' "$BASE_RESULT_FILE" | tee "$FINAL_OUTPUT_FILE"
 
+  if [[ -n "${CODEX_BRIDGE_BASE_URL:-}" && -n "${CODEX_BRIDGE_INTERNAL_API_TOKEN:-}" && -f "$FINAL_OUTPUT_FILE" ]]; then
+    "$PYTHON_BIN" -m app.execution.cli post-callback \
+      --run-id "$RUN_ID" \
+      --payload-file "$FINAL_OUTPUT_FILE" \
+      --job-file "${RUNS_DIR}/${RUN_ID}-job.json" \
+      --plan-file "${RUNS_DIR}/${RUN_ID}-plan.json" \
+      --exec-output-file "${RUNS_DIR}/${RUN_ID}-exec-results.json" \
+      --timing-file "$TIMING_FILE" \
+      --final-output-file "$FINAL_OUTPUT_FILE" \
+      --base-url "${CODEX_BRIDGE_BASE_URL}" \
+      --token "${CODEX_BRIDGE_INTERNAL_API_TOKEN}" >/dev/null 2>&1 || true
+  fi
+
   return "$exit_code"
 }
 
@@ -334,6 +360,7 @@ handle_interrupt() {
     "$reason" \
     "Gemini automation interrupted before completion." \
     "low"
+  jq '. + {interrupted_flag:true, phase:"final"}' "$BASE_RESULT_FILE" >"${BASE_RESULT_FILE}.tmp" && mv "${BASE_RESULT_FILE}.tmp" "$BASE_RESULT_FILE"
   emit_final_output "$exit_code"
   exit $?
 }
@@ -371,7 +398,8 @@ if ! jq . "$JOB_FILE" >/dev/null 2>&1; then
 fi
 
 JOB_ID="$(jq -r '.job_id // empty' "$JOB_FILE")"
-RUN_ID="${JOB_ID:-$RUN_ID}"
+RUN_ID="$(jq -r '.run_id // empty' "$JOB_FILE")"
+RUN_ID="${RUN_ID:-${JOB_ID:-$RUN_ID}}"
 JOB_ID="${JOB_ID:-$RUN_ID}"
 TIMING_FILE="${RUNS_DIR}/${RUN_ID}-timing.json"
 FINAL_OUTPUT_FILE="${RUNS_DIR}/${RUN_ID}-final.json"
@@ -405,11 +433,13 @@ else
         "Gemini CLI timed out after ${GEMINI_TIMEOUT_SECONDS}s." \
         "Gemini automation stopped because headless execution exceeded the timeout." \
         "low"
+      jq '. + {timeout_flag:true, phase:"final"}' "$BASE_RESULT_FILE" >"${BASE_RESULT_FILE}.tmp" && mv "${BASE_RESULT_FILE}.tmp" "$BASE_RESULT_FILE"
     else
       write_blocked_result_json \
         "Gemini CLI exited with status ${gemini_exit_code}." \
         "Gemini automation stopped during headless execution." \
         "low"
+      jq '. + {phase:"final"}' "$BASE_RESULT_FILE" >"${BASE_RESULT_FILE}.tmp" && mv "${BASE_RESULT_FILE}.tmp" "$BASE_RESULT_FILE"
     fi
     emit_final_output "$gemini_exit_code"
     exit $?
@@ -424,6 +454,7 @@ if ! jq . "$RAW_OUTPUT_FILE" >/dev/null 2>&1; then
     "Gemini did not return valid JSON." \
     "Gemini automation stopped because the model response was not parseable JSON." \
     "low"
+  jq '. + {phase:"final"}' "$BASE_RESULT_FILE" >"${BASE_RESULT_FILE}.tmp" && mv "${BASE_RESULT_FILE}.tmp" "$BASE_RESULT_FILE"
   emit_final_output 1
   exit $?
 fi
@@ -439,6 +470,7 @@ if ! jq . "$PLAN_OUTPUT_FILE" >/dev/null 2>&1; then
     "Gemini response payload did not contain valid plan JSON." \
     "Gemini automation stopped because the extracted plan payload was not valid JSON." \
     "low"
+  jq '. + {phase:"final"}' "$BASE_RESULT_FILE" >"${BASE_RESULT_FILE}.tmp" && mv "${BASE_RESULT_FILE}.tmp" "$BASE_RESULT_FILE"
   emit_final_output 1
   exit $?
 fi
@@ -462,6 +494,7 @@ else
     "Executor did not return valid JSON." \
     "Gemini automation stopped during safe command execution." \
     "low"
+  jq '. + {phase:"final"}' "$BASE_RESULT_FILE" >"${BASE_RESULT_FILE}.tmp" && mv "${BASE_RESULT_FILE}.tmp" "$BASE_RESULT_FILE"
   exec_exit_code=1
 fi
 

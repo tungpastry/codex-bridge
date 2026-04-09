@@ -1,0 +1,14 @@
+repo_name: MiddayCommander
+default_safe_services:
+  - middaycommander
+  - codex-bridge
+common_repo_paths:
+  - cmd/
+  - internal/
+  - scripts/
+common_likely_files:
+  - internal/fs/router.go
+  - internal/transfer/
+  - cmd/
+prompt_hints:
+  - Prioritize safe, incremental fixes for build, test, and deployment workflows.

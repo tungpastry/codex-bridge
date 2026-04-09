@@ -1,0 +1,39 @@
+[
+  {
+    "name": "panic_log_routes_to_codex",
+    "request": {
+      "service": "middaycommander",
+      "log_text": "panic: retry queue failed\ntraceback: worker crashed\nvalidation error on transfer payload",
+      "repo": "MiddayCommander",
+      "source": "fixture"
+    },
+    "expected": {
+      "recommended_tool": "codex",
+      "needs_codex": true
+    }
+  },
+  {
+    "name": "ops_log_routes_to_gemini",
+    "request": {
+      "service": "codex-bridge",
+      "log_text": "systemd restart loop detected\nservice entered failed state\ncheck journalctl and systemctl",
+      "repo": "codex-bridge",
+      "source": "fixture"
+    },
+    "expected": {
+      "recommended_tool": "gemini"
+    }
+  },
+  {
+    "name": "risky_log_routes_to_human",
+    "request": {
+      "service": "postgresql",
+      "log_text": "operator requested schema migration in production and delete production data",
+      "repo": "codex-bridge",
+      "source": "fixture"
+    },
+    "expected": {
+      "recommended_tool": "human"
+    }
+  }
+]

@@ -196,8 +196,11 @@ LLM_TIMEOUT_SECONDS=120
 
 PROMPTS_DIR=/home/nexus/codex-bridge/prompts
 STORAGE_DIR=/home/nexus/codex-bridge/storage
+RUN_INDEX_DB_PATH=/home/nexus/codex-bridge/storage/index/runs.db
+PROFILES_DIR=/home/nexus/codex-bridge/app/profiles
 CORS_ALLOW_ORIGINS_RAW=http://localhost,http://127.0.0.1
 ALLOWED_RESTART_SERVICES_RAW=codex-bridge,postgresql,nginx
+CODEX_BRIDGE_INTERNAL_API_TOKEN=change-me-in-prod
 ```
 
 Mac automation settings:
@@ -335,6 +338,7 @@ curl -sS http://127.0.0.1:8787/v1/dispatch/task \
 Supported endpoints:
 
 - `GET /health`
+- `GET /health?depth=full`
 - `POST /v1/classify/task`
 - `POST /v1/summarize/log`
 - `POST /v1/summarize/diff`
@@ -342,6 +346,11 @@ Supported endpoints:
 - `POST /v1/brief/codex`
 - `POST /v1/report/daily`
 - `POST /v1/dispatch/task`
+- `GET /v1/runs`
+- `GET /v1/runs/{run_id}`
+- `GET /v1/runs/{run_id}/artifacts`
+- `GET /v1/admin/metrics`
+- `POST /v1/internal/runs/{run_id}/execution` for internal runner callbacks only
 
 See [docs/api-reference.md](docs/api-reference.md) for full request and response details.
 
@@ -369,6 +378,7 @@ See [docs/api-reference.md](docs/api-reference.md) for full request and response
 - [docs/architecture.md](docs/architecture.md)
 - [docs/api-reference.md](docs/api-reference.md)
 - [docs/deployment.md](docs/deployment.md)
+- [docs/upgrade-blueprint-v1.md](docs/upgrade-blueprint-v1.md)
 - [docs/huong-dan-su-dung.md](docs/huong-dan-su-dung.md)
 - [docs/workflow.md](docs/workflow.md)
 - [docs/sop.md](docs/sop.md)

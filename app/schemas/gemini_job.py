@@ -28,9 +28,11 @@ class GeminiJobOutputContract(SchemaBase):
 
 class GeminiJob(SchemaBase):
     mode: Literal["ops_auto"] = "ops_auto"
+    run_id: str = ""
     job_id: str
     title: str
     repo: str
+    profile_name: str = ""
     problem_summary: str
     context_digest: str
     constraints: List[str] = Field(default_factory=list)
